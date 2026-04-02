@@ -22,7 +22,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.ex1.renderer import preprocess_target, render_ascii_grid, indices_to_chars, CHARSET
+from src.ex1.renderer import preprocess_target, render_ascii_grid, indices_to_chars
 from src.ex1.individual import greedy_individual
 from src.ex1.ga import run_ga_interruptible
 
@@ -86,7 +86,7 @@ def main():
     visualizer = None
     if not args.no_plot:
         from src.ex1.visualizer import AsciiGAVisualizer
-        visualizer = AsciiGAVisualizer(target_pil, title=f"ASCII Art GA — {Path(image_path).name}")
+        visualizer = AsciiGAVisualizer(target_pil, grid_n=args.n, title=f"ASCII Art GA — {Path(image_path).name}")
 
     history: list[tuple] = []
     stopped_early = False
@@ -99,9 +99,7 @@ def main():
             print(f"  Gen {gen:4d} | best={best_fitness:.5f} | avg={avg_fitness:.5f}")
 
         if visualizer is not None:
-            rendered_pil = render_ascii_grid(best_genome, args.n, args.cell)
-            rendered_rgb = rendered_pil.convert("RGB")
-            keep_going = visualizer.update(gen, rendered_rgb, best_fitness, avg_fitness)
+            keep_going = visualizer.update(gen, best_genome, best_fitness, avg_fitness)
             if not keep_going:
                 stopped_early = True
                 raise StopIteration  # signal the GA loop to stop

@@ -158,7 +158,7 @@ def run_ga(
     crossover_rate: float = 0.8,
     tournament_m: int = 3,
     seed: int = 42,
-    warm_start: bool = True,  # seed population with perturbed greedy individuals
+    warm_start: bool = False,  # seed population with perturbed greedy individuals
     callback=None,  # called each generation with (gen, best_genome, best_fitness, avg_fitness)
 ) -> tuple[np.ndarray, list[float]]:
     """

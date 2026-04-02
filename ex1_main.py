@@ -60,6 +60,7 @@ def main():
     parser.add_argument("--mut", type=float, default=0.02, help="Mutation rate (default: 0.02)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--no-plot", action="store_true", help="Disable live pygame window")
+    parser.add_argument("--warm-start", action="store_true", help="Seed population with greedy individuals (faster but less visual)")
     args = parser.parse_args()
 
     Path("images").mkdir(exist_ok=True)
@@ -114,6 +115,7 @@ def main():
         n_generations=args.gens,
         mutation_rate=args.mut,
         seed=args.seed,
+        warm_start=args.warm_start,
         callback=on_generation,
     )
     if stopped_early:

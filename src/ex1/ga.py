@@ -240,3 +240,15 @@ def run_ga(
             callback(gen, best_genome, best_fitness, avg_fitness)
 
     return best_genome, history
+
+
+def run_ga_interruptible(target, grid_n, **kwargs):
+    """
+    Wrapper around run_ga that catches StopIteration from the callback
+    (used when the pygame window is closed mid-run).
+    Returns (best_genome, history) regardless of whether it completed.
+    """
+    try:
+        return run_ga(target, grid_n, **kwargs)
+    except StopIteration:
+        return None, []

@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 # Keeps the structural chars (/ \ | ( ) - _) and fills in gradations
 # for enough brightness steps to accurately represent the image.
 CHARSET = " .'`,:;-_()|\\/!lIrc+*%#@"
-N_CHARS = len(CHARSET)  # 25
+N_CHARS = len(CHARSET)  # 24
 
 
 def indices_to_chars(genome: np.ndarray, grid_n: int) -> list[list[str]]:

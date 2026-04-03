@@ -12,9 +12,9 @@ insight that lets the GA evolve toward the right chars.
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-# Charset ordered light → dark (standard ASCII art brightness scale)
-CHARSET = " .:-=+*#%@"
-N_CHARS = len(CHARSET)  # 10
+# Charset ordered light → dark by visual pixel coverage
+CHARSET = " -_()|/\\"
+N_CHARS = len(CHARSET)  # 8
 
 
 def indices_to_chars(genome: np.ndarray, grid_n: int) -> list[list[str]]:

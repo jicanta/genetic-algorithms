@@ -19,7 +19,7 @@ pip install imageio
 ## Uso
 
 ```bash
-python ascii_ga.py <imagen> [opciones]
+python3 main.py <imagen> [opciones]
 ```
 
 ### Parámetros
@@ -45,16 +45,16 @@ python ascii_ga.py <imagen> [opciones]
 
 ```bash
 # Ejecución básica
-python ascii_ga.py imagen.jpg
+python3 main.py imagen.jpg
 
 # Mayor resolución y más generaciones
-python ascii_ga.py imagen.jpg --cols 120 --generations 2000 --population 100
+python3 main.py imagen.jpg --cols 120 --generations 2000 --population 100
 
 # Exportar evolución como GIF
-python ascii_ga.py imagen.jpg --save-every 25 --gif
+python3 main.py imagen.jpg --save-every 25 --gif
 
 # Fuente personalizada
-python ascii_ga.py imagen.jpg --font /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf --font-size 10
+python3 main.py imagen.jpg --font /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf --font-size 10
 ```
 
 ---
@@ -64,23 +64,21 @@ python ascii_ga.py imagen.jpg --font /usr/share/fonts/truetype/dejavu/DejaVuSans
 A diferencia de un conversor ASCII clásico (que mapea brillo local → caracter), este algoritmo hace búsqueda global:
 
 1. **Representación:** cada individuo es una grilla de índices al charset.
-2. **Renderizado:** la grilla se convierte en imagen pintando los glifos reales con la fuente.
+2. **Renderizado:** la grilla se convierte en imagen pegando los glifos reales de la fuente.
 3. **Fitness:** MSE entre la imagen renderizada y la imagen objetivo (menor = mejor).
 4. **Evolución:** selección por torneo, cruce uniforme o por bloque rectangular, mutación con sesgo al vecino en orden de oscuridad.
-5. **Warm start:** mitad de la población inicial proviene de un mapeo greedy de brillo; la otra mitad es aleatoria.
+5. **Warm start:** mitad de la población inicial viene de un mapeo greedy de brillo; la otra mitad es aleatoria.
 
 ### Operadores genéticos
 
 - **Selección:** torneo determinístico de tamaño `k`
-- **Cruce:** uniforme por celda o por bloque rectangular (alternados)
-- **Mutación:** 70% salta al vecino ±1/2 en orden de oscuridad, 30% caracter aleatorio
+- **Cruce:** uniforme por celda (mezcla fina) o por bloque rectangular (preserva coherencia espacial), alternados al azar
+- **Mutación:** 70% paso ±1/2 en orden de oscuridad medida (búsqueda local), 30% caracter aleatorio (exploración)
 - **Elitismo:** los top-N pasan sin modificar a la siguiente generación
 
 ---
 
 ## Output
-
-Los resultados se guardan en `output/`:
 
 ```
 output/
@@ -99,7 +97,15 @@ output/
 
 ```
 genetic-algorithms/
-├── ascii_ga.py    # Código completo: Config, ASCIIArtGA, CLI
-├── images/        # Imágenes de entrada
-└── output/        # Resultados (ignorado por git)
+├── main.py              # CLI: parseo de argumentos y loop de evolución
+├── ascii_ga/
+│   ├── config.py        # Config dataclass con todos los hiperparámetros
+│   ├── font.py          # Carga de fuente y construcción del glyph cache
+│   ├── image.py         # Carga y preprocesado de la imagen objetivo
+│   ├── render.py        # render_genome: genome → imagen numpy (vectorizado)
+│   ├── fitness.py       # compute_fitness: MSE imagen renderizada vs target
+│   ├── operators.py     # greedy_genome, selección, cruce, mutación
+│   ├── ga.py            # Clase ASCIIArtGA: población, initialize(), step()
+│   └── io.py            # genome_to_text, save_result
+└── images/              # Imágenes de entrada
 ```

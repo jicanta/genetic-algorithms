@@ -39,6 +39,16 @@ class Config:
     survival_strategy: str = "exclusive"
     # Options: exclusive | additive
 
+    # --- Termination criteria ---
+    # Max generations is always active (the `generations` field above).
+    # The two below are opt-in.
+    stop_on_stagnation: bool = False     # content: stop if no improvement for N gens
+    stagnation_gens: int = 50            # how many gens without improvement trigger stop
+    stagnation_delta: float = 0.5        # minimum MSE improvement to reset the counter
+
+    stop_on_convergence: bool = False    # structure: stop if population diversity collapses
+    convergence_threshold: float = 5.0  # std of fitnesses below this → converged
+
     # --- I/O ---
     save_every: int = 50
     output_dir: str = "output_triangles"

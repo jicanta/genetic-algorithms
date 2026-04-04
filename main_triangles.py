@@ -88,6 +88,13 @@ def parse_args() -> Config:
                    choices=["exclusive", "additive"],
                    help="Survival strategy (default: exclusive)")
 
+    # Termination
+    p.add_argument("--stop-stagnation",  action="store_true",                 help="Stop if no improvement for --stagnation-gens generations")
+    p.add_argument("--stagnation-gens",  type=int,   default=50,              help="Stagnation window in generations (default: 50)")
+    p.add_argument("--stagnation-delta", type=float, default=0.5,             help="Minimum MSE improvement to reset stagnation counter (default: 0.5)")
+    p.add_argument("--stop-convergence", action="store_true",                 help="Stop if population fitness std drops below threshold")
+    p.add_argument("--convergence-thr",  type=float, default=5.0,             help="Fitness std threshold for convergence stop (default: 5.0)")
+
     # I/O
     p.add_argument("--save-every",       type=int,   default=50,               help="Snapshot interval in gens (default: 50)")
     p.add_argument("--output",           default="output_triangles",           help="Output directory (default: output_triangles)")
@@ -113,6 +120,11 @@ def parse_args() -> Config:
         mutation_sigma=a.mutation_sigma,
         multigen_max_genes=a.multigen_max,
         survival_strategy=a.survival,
+        stop_on_stagnation=a.stop_stagnation,
+        stagnation_gens=a.stagnation_gens,
+        stagnation_delta=a.stagnation_delta,
+        stop_on_convergence=a.stop_convergence,
+        convergence_threshold=a.convergence_thr,
         save_every=a.save_every,
         output_dir=a.output,
         seed=a.seed,
@@ -136,7 +148,16 @@ def main() -> None:
     out_dir = Path(cfg.output_dir)
     snap_dir = out_dir / "snapshots"
 
+    stop_info = []
+    if cfg.stop_on_stagnation:
+        stop_info.append(f"stagnation>{cfg.stagnation_gens}gens")
+    if cfg.stop_on_convergence:
+        stop_info.append(f"convergence<{cfg.convergence_threshold}")
+    criteria = " | ".join(stop_info) if stop_info else "max generations only"
+    print(f"  Termination: {criteria}")
+
     print(f"\nEvolving {cfg.generations} generations...\n")
+    stop_reason = ""
     for gen in range(cfg.generations):
         best_fit, mean_fit = ga.step()
         print(
@@ -152,6 +173,12 @@ def main() -> None:
                 best_genome, img_w, img_h, snap_dir, f"gen_{gen+1:05d}"
             )
             print(f"    → snapshot: {png_path}")
+
+        stop, reason = ga.should_stop()
+        if stop:
+            stop_reason = reason
+            print(f"\n  Early stop at gen {gen+1}: {reason}")
+            break
 
     best_genome, best_fitness = ga.best
     json_path, png_path = save_result(best_genome, img_w, img_h, out_dir, "best")

@@ -92,6 +92,10 @@ class TriangleGA:
         self._best_genome: Optional[np.ndarray] = None
         self._best_fitness: float = float("inf")
 
+        # Termination tracking
+        self._stagnation_counter: int = 0
+        self._last_improved_fitness: float = float("inf")
+
     @property
     def best(self) -> tuple[np.ndarray, float]:
         """Current best genome and its MSE fitness."""
@@ -205,11 +209,53 @@ class TriangleGA:
         progress = self._generation / max(cfg.generations - 1, 1)
         return cfg.boltzmann_temp_init + progress * (cfg.boltzmann_temp_min - cfg.boltzmann_temp_init)
 
+    def should_stop(self) -> tuple[bool, str]:
+        """
+        Check termination criteria other than max generations.
+
+        Returns:
+            (stop: bool, reason: str)
+
+        Stagnation (content): the best fitness hasn't improved by at least
+        `stagnation_delta` in the last `stagnation_gens` consecutive generations.
+        Tracks real progress, not just noise — small oscillations don't reset the counter.
+
+        Convergence (structure): the standard deviation of the population's fitnesses
+        drops below `convergence_threshold`. When all individuals score similarly,
+        the population has collapsed and further evolution yields diminishing returns.
+        """
+        cfg = self.config
+
+        if cfg.stop_on_stagnation:
+            if self._stagnation_counter >= cfg.stagnation_gens:
+                return True, (
+                    f"stagnation: no improvement > {cfg.stagnation_delta} "
+                    f"for {cfg.stagnation_gens} generations"
+                )
+
+        if cfg.stop_on_convergence:
+            diversity = float(self.fitnesses.std())
+            if diversity < cfg.convergence_threshold:
+                return True, (
+                    f"convergence: fitness std={diversity:.2f} "
+                    f"< threshold={cfg.convergence_threshold}"
+                )
+
+        return False, ""
+
     def _eval(self, genome: np.ndarray) -> float:
         return compute_fitness(genome, self.target, self.img_w, self.img_h)
 
     def _sync_best(self) -> None:
         idx = int(np.argmin(self.fitnesses))
-        if self.fitnesses[idx] < self._best_fitness:
-            self._best_fitness = float(self.fitnesses[idx])
+        current = float(self.fitnesses[idx])
+        if current < self._best_fitness:
+            self._best_fitness = current
             self._best_genome = self.population[idx].copy()
+
+        # Update stagnation counter
+        if self._last_improved_fitness - self._best_fitness >= self.config.stagnation_delta:
+            self._stagnation_counter = 0
+            self._last_improved_fitness = self._best_fitness
+        else:
+            self._stagnation_counter += 1

@@ -1,9 +1,12 @@
 #!/bin/bash
-# Prueba cada método de selección en ambas imágenes.
-# Parámetros reducidos para que cada corrida tarde poco.
+# Prueba cada método de cruce en ambas imágenes.
+# Variables fijas elegidas por estabilidad:
+#   selección  → tournament_det  (presión selectiva consistente, poco ruido)
+#   mutación   → uniform         (baseline: per-gen gaussiana, no interfiere con el cruce)
+#   supervivencia → exclusive    (reemplazo total, estándar)
 
 IMAGES=("images/test_smiley.png" "images/argentina_flag.png")
-SELECTIONS=("tournament_det" "tournament_prob" "roulette" "universal" "boltzmann" "ranking")
+CROSSOVERS=("uniform" "one_point" "two_point" "annular")
 
 N_TRIANGLES=50
 POPULATION=65
@@ -13,11 +16,14 @@ SAVE_EVERY=50
 
 for IMAGE in "${IMAGES[@]}"; do
     IMAGE_NAME=$(basename "$IMAGE" .png)
-    for SEL in "${SELECTIONS[@]}"; do
-        OUTPUT="output_tests/${IMAGE_NAME}/selection_${SEL}"
-        echo "=== $SEL | $IMAGE_NAME ==="
+    for CX in "${CROSSOVERS[@]}"; do
+        OUTPUT="output_tests/${IMAGE_NAME}/crossover_${CX}"
+        echo "=== $CX | $IMAGE_NAME ==="
         python3 main_triangles.py "$IMAGE" \
-            --selection      "$SEL" \
+            --crossover      "$CX" \
+            --selection      tournament_det \
+            --mutation       uniform \
+            --survival       exclusive \
             --n-triangles    $N_TRIANGLES \
             --population     $POPULATION \
             --generations    $GENERATIONS \

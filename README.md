@@ -137,16 +137,40 @@ output/ascii_ga/
 
 ## Part 1 (bonus) — Greedy ASCII Matching
 
-A fast non-evolutionary alternative that solves each cell independently and exactly.
+A fast non-evolutionary alternative based on hybrid greedy matching.
 
-For each cell in the target grid, it selects the character whose rendered glyph minimizes pixel-level SSE against the corresponding image block. Because the objective is separable (total MSE = sum of per-cell MSEs), this finds the global optimum for this formulation in a single pass.
+For each cell in the target grid, it scores every glyph using a weighted combination of:
+
+- grayscale mismatch
+- Sobel edge mismatch
+- boundary consistency with already chosen neighbors
+
+It also diffuses residual error to future cells in a Floyd-Steinberg-style pattern over the block grid. This is no longer the exact separable optimum, but it often gives better-looking ASCII because it accounts for orientation and local continuity, not only tone.
 
 ```bash
 python ascii_ga/main_greedy.py images/photo.jpg
 python ascii_ga/main_greedy.py images/photo.jpg --cols 120 --charset "@%#*+=-:. "
+python ascii_ga/main_greedy.py images/photo.jpg --edge-weight 0 --neighbor-weight 0 --dither-strength 0
 ```
 
-Output goes to `output/ascii_greedy/` by default. See `docs/ascii_greedy.md` for details.
+### Greedy parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--cols` | `80` | ASCII grid columns |
+| `--font` | *(auto)* | Path to TTF monospace font |
+| `--font-size` | `12` | Font size in points |
+| `--charset` | all printable ASCII | Allowed characters |
+| `--char-aspect` | *(auto)* | `cell_w/cell_h` override |
+| `--tone-weight` | `1.0` | Weight for grayscale block mismatch |
+| `--edge-weight` | `0.20` | Weight for Sobel edge mismatch |
+| `--neighbor-weight` | `0.10` | Weight for left/up boundary consistency |
+| `--dither-strength` | `0.15` | Error-diffusion strength to future cells |
+| `--output` | `output/ascii_greedy/` | Output directory |
+
+If you set `--edge-weight 0 --neighbor-weight 0 --dither-strength 0`, the algorithm falls back to the exact separable baseline: plain per-block SSE matching with no perceptual heuristics.
+
+Output goes to `output/ascii_greedy/` by default. See [`docs/ascii_greedy.md`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/docs/ascii_greedy.md) for details.
 
 ---
 

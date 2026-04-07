@@ -34,6 +34,8 @@ class Config:
             raise ValueError(f"population must be >= 2, got {self.population}")
         if self.elite < 0 or self.elite >= self.population:
             raise ValueError(f"elite must be in [0, population), got {self.elite}")
+        if self.tournament_k < 1:
+            raise ValueError(f"tournament_k must be >= 1, got {self.tournament_k}")
         if self.generations < 1:
             raise ValueError(f"generations must be >= 1, got {self.generations}")
         if not 0.0 <= self.mutation <= 1.0:
@@ -42,6 +44,8 @@ class Config:
             raise ValueError(f"crossover_prob must be in [0, 1], got {self.crossover_prob}")
         if self.cols < 1:
             raise ValueError(f"cols must be >= 1, got {self.cols}")
+        if not self.charset:
+            raise ValueError("charset must contain at least one character")
         if self.stagnation_gens < 1:
             raise ValueError(f"stagnation_gens must be >= 1, got {self.stagnation_gens}")
         if self.convergence_threshold <= 0.0:

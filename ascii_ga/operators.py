@@ -76,8 +76,10 @@ def crossover_block(
     Preserves spatial coherence better than uniform crossover.
     """
     rows, cols = p1.shape
-    r1, r2 = sorted(rng.integers(0, rows + 1, size=2))
-    c1, c2 = sorted(rng.integers(0, cols + 1, size=2))
+    r1 = int(rng.integers(0, rows))
+    r2 = int(rng.integers(r1 + 1, rows + 1))
+    c1 = int(rng.integers(0, cols))
+    c2 = int(rng.integers(c1 + 1, cols + 1))
     ch1, ch2 = p1.copy(), p2.copy()
     ch1[r1:r2, c1:c2] = p2[r1:r2, c1:c2]
     ch2[r1:r2, c1:c2] = p1[r1:r2, c1:c2]
@@ -104,6 +106,9 @@ def mutate(
     incremental progress most of the time.
     """
     child = genome.copy()
+    if n_chars < 2:
+        return child
+
     mask = rng.random(child.shape) < mutation_rate
     n_mut = int(mask.sum())
     if n_mut == 0:
@@ -117,12 +122,29 @@ def mutate(
     new_vals = np.empty(n_mut, dtype=np.int32)
 
     if (~use_neighbor).any():
-        new_vals[~use_neighbor] = rng.integers(0, n_chars, size=(~use_neighbor).sum())
+        random_current = current[~use_neighbor]
+        random_draws = rng.integers(0, n_chars - 1, size=random_current.size)
+        new_vals[~use_neighbor] = random_draws + (random_draws >= random_current)
 
     if use_neighbor.any():
         cur_ranks = rank_of[current[use_neighbor]]
-        steps = rng.integers(-2, 3, size=use_neighbor.sum())  # -2, -1, 0, +1, +2
+        steps = rng.choice(np.array([-2, -1, 1, 2], dtype=np.int32), size=use_neighbor.sum())
         new_ranks = np.clip(cur_ranks + steps, 0, n_chars - 1)
+        same_rank = new_ranks == cur_ranks
+        if same_rank.any():
+            at_darkest = cur_ranks[same_rank] == 0
+            at_lightest = cur_ranks[same_rank] == (n_chars - 1)
+            corrected = new_ranks[same_rank].copy()
+            corrected[at_darkest] = 1
+            corrected[at_lightest] = n_chars - 2
+
+            middle = ~(at_darkest | at_lightest)
+            if middle.any():
+                corrected[middle] = cur_ranks[same_rank][middle] + rng.choice(
+                    np.array([-1, 1], dtype=np.int32), size=middle.sum()
+                )
+
+            new_ranks[same_rank] = corrected
         new_vals[use_neighbor] = sorted_dark[new_ranks]
 
     child[mask] = new_vals

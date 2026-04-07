@@ -110,29 +110,22 @@ def universal(
     population: list[np.ndarray],
     fitnesses: np.ndarray,
     rng: np.random.Generator,
-    n_select: int = 1,
     **_kwargs,
-) -> list[np.ndarray]:
+) -> np.ndarray:
     """
-    Stochastic Universal Sampling (SUS).
+    Stochastic Universal Sampling (SUS) — single-selection variant.
 
-    Uses n equally-spaced pointers over the cumulative probability distribution,
-    starting from a single random offset. Lower variance than repeated roulette spins
-    for the same expected probabilities.
-
-    Returns a list of n selected individuals (call once to get all parents).
+    Places one pointer at a random position on the cumulative probability
+    distribution (equivalent to a single SUS pointer). Same expected distribution
+    as roulette but pairs of calls to this function are less likely to select the
+    same individual, reducing variance across a generation.
     """
     probs = _invert_fitnesses(fitnesses)
     cumulative = np.cumsum(probs)
-    start = rng.random() / n_select
-    pointers = start + np.arange(n_select) / n_select
-
-    selected = []
-    for ptr in pointers:
-        idx = int(np.searchsorted(cumulative, ptr))
-        idx = min(idx, len(population) - 1)
-        selected.append(population[idx])
-    return selected
+    ptr = rng.random()
+    idx = int(np.searchsorted(cumulative, ptr))
+    idx = min(idx, len(population) - 1)
+    return population[idx]
 
 
 def boltzmann(
@@ -175,10 +168,9 @@ def ranking(
     prob_i ∝ (N - rank_i + 1)  →  best gets rank N, worst gets rank 1.
     """
     n = len(population)
-    order = np.argsort(fitnesses)        # index of best individual first
+    order = np.argsort(fitnesses)   # order[0] = index of best (lowest MSE) individual
     ranks = np.empty(n, dtype=float)
-    for rank, idx in enumerate(order[::-1]):  # best → rank n, worst → rank 1
-        ranks[idx] = rank + 1
+    ranks[order] = np.arange(n, 0, -1, dtype=float)  # best → rank n, worst → rank 1
     probs = ranks / ranks.sum()
     idx = rng.choice(n, p=probs)
     return population[idx]

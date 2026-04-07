@@ -42,6 +42,10 @@ class ASCIIArtGA:
         self._best_genome: Optional[np.ndarray] = None
         self._best_fitness: float = float("inf")
 
+        # Termination tracking
+        self._stagnation_counter: int = 0
+        self._last_improved_fitness: float = float("inf")
+
     @property
     def best(self) -> tuple[np.ndarray, float]:
         """Current best genome and its fitness (MSE)."""
@@ -112,6 +116,38 @@ class ASCIIArtGA:
 
         return self._best_fitness, float(self.fitnesses.mean())
 
+    def should_stop(self) -> tuple[bool, str]:
+        """
+        Check optional termination criteria (beyond max generations).
+
+        Returns:
+            (stop: bool, reason: str)
+
+        Stagnation (content): best fitness hasn't improved by at least
+        `stagnation_delta` for `stagnation_gens` consecutive generations.
+
+        Convergence (structure): std of population fitnesses drops below
+        `convergence_threshold`, meaning the population has collapsed.
+        """
+        cfg = self.config
+
+        if cfg.stop_on_stagnation:
+            if self._stagnation_counter >= cfg.stagnation_gens:
+                return True, (
+                    f"stagnation: no improvement > {cfg.stagnation_delta} "
+                    f"for {cfg.stagnation_gens} generations"
+                )
+
+        if cfg.stop_on_convergence:
+            diversity = float(self.fitnesses.std())
+            if diversity < cfg.convergence_threshold:
+                return True, (
+                    f"convergence: fitness std={diversity:.2f} "
+                    f"< threshold={cfg.convergence_threshold}"
+                )
+
+        return False, ""
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _eval(self, genome: np.ndarray) -> float:
@@ -120,8 +156,15 @@ class ASCIIArtGA:
             self.rows, self.cols, self.cell_h, self.cell_w,
         )
 
-    def _sync_best(self):
+    def _sync_best(self) -> None:
         idx = int(np.argmin(self.fitnesses))
-        if self.fitnesses[idx] < self._best_fitness:
-            self._best_fitness = float(self.fitnesses[idx])
+        current = float(self.fitnesses[idx])
+        if current < self._best_fitness:
+            self._best_fitness = current
             self._best_genome = self.population[idx].copy()
+
+        if self._last_improved_fitness - self._best_fitness >= self.config.stagnation_delta:
+            self._stagnation_counter = 0
+            self._last_improved_fitness = self._best_fitness
+        else:
+            self._stagnation_counter += 1

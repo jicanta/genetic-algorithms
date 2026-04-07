@@ -45,10 +45,19 @@ def parse_args() -> Config:
     p.add_argument("--output",       default="output",                  help="Output directory (default: output)")
     p.add_argument("--elite",        type=int,   default=5,             help="Elite count (default: 5)")
     p.add_argument("--tournament-k", type=int,   default=5,             help="Tournament size (default: 5)")
-    p.add_argument("--charset",      default="@%#*+=-:. ",              help="Character set, dark→light")
-    p.add_argument("--char-aspect",  type=float, default=None,          help="cell_w/cell_h override (default: auto)")
-    p.add_argument("--gif",          action="store_true",               help="Save evolution.gif (needs imageio)")
-    p.add_argument("--seed",         type=int,   default=42)
+    p.add_argument("--crossover-prob", type=float, default=0.8,         help="Crossover probability (default: 0.8)")
+    p.add_argument("--charset",        default="@%#*+=-:. ",            help="Character set, dark→light")
+    p.add_argument("--char-aspect",    type=float, default=None,        help="cell_w/cell_h override (default: auto)")
+    p.add_argument("--gif",            action="store_true",             help="Save evolution.gif (needs imageio)")
+    p.add_argument("--seed",           type=int,   default=42)
+
+    # Termination criteria
+    p.add_argument("--stop-stagnation",  action="store_true",           help="Stop if no improvement for --stagnation-gens generations")
+    p.add_argument("--stagnation-gens",  type=int,   default=50,        help="Stagnation window in generations (default: 50)")
+    p.add_argument("--stagnation-delta", type=float, default=0.5,       help="Minimum MSE improvement to reset stagnation counter (default: 0.5)")
+    p.add_argument("--stop-convergence", action="store_true",           help="Stop if population fitness std drops below threshold")
+    p.add_argument("--convergence-thr",  type=float, default=5.0,       help="Fitness std threshold for convergence stop (default: 5.0)")
+
     a = p.parse_args()
     return Config(
         image_path=a.image,
@@ -56,6 +65,7 @@ def parse_args() -> Config:
         population=a.population,
         generations=a.generations,
         mutation=a.mutation,
+        crossover_prob=a.crossover_prob,
         font_path=a.font_path,
         font_size=a.font_size,
         save_every=a.save_every,
@@ -66,6 +76,11 @@ def parse_args() -> Config:
         char_aspect=a.char_aspect,
         gif=a.gif,
         seed=a.seed,
+        stop_on_stagnation=a.stop_stagnation,
+        stagnation_gens=a.stagnation_gens,
+        stagnation_delta=a.stagnation_delta,
+        stop_on_convergence=a.stop_convergence,
+        convergence_threshold=a.convergence_thr,
     )
 
 
@@ -95,6 +110,14 @@ def main():
     snap_dir = out_dir / "snapshots"
     gif_frames: list[np.ndarray] = []
 
+    stop_info = []
+    if cfg.stop_on_stagnation:
+        stop_info.append(f"stagnation>{cfg.stagnation_gens}gens")
+    if cfg.stop_on_convergence:
+        stop_info.append(f"convergence<{cfg.convergence_threshold}")
+    criteria = " | ".join(stop_info) if stop_info else "max generations only"
+    print(f"  Termination: {criteria}")
+
     print(f"\nEvolving {cfg.generations} generations...\n")
     for gen in range(cfg.generations):
         best_fit, mean_fit = ga.step()
@@ -112,10 +135,14 @@ def main():
                 snap_dir, prefix=f"gen_{gen+1:05d}",
             )
             print(f"    → snapshot: {png}")
-
             if cfg.gif:
                 rendered = render_genome(best_genome, glyphs, rows, cols, cell_h, cell_w)
                 gif_frames.append(rendered.copy())
+
+        stop, reason = ga.should_stop()
+        if stop:
+            print(f"\n  Early stop at gen {gen+1}: {reason}")
+            break
 
     best_genome, best_fitness = ga.best
     txt_path, png_path = save_result(

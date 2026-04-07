@@ -5,5 +5,4 @@ __pycache__/
 output/
 *.pdf
 .idea/
-output_triangles/
 output_tests/

@@ -3,14 +3,19 @@
 Triangle Art via Genetic Algorithm — entry point.
 
 Usage:
-    python main_triangles.py input.jpg
-    python main_triangles.py input.jpg --n-triangles 100 --generations 1000
-    python main_triangles.py input.jpg --selection boltzmann --crossover annular --mutation non_uniform
-    python main_triangles.py input.jpg --survival additive --img-size 128
+    python triangles_ga/main.py input.jpg
+    python triangles_ga/main.py input.jpg --n-triangles 100 --generations 1000
+    python triangles_ga/main.py input.jpg --selection boltzmann --crossover annular --mutation non_uniform
+    python triangles_ga/main.py input.jpg --survival additive --img-size 128
 """
 
-import argparse
+import sys
 from pathlib import Path
+
+# Allow running as a script from the project root: python triangles_ga/main.py ...
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import argparse
 from typing import Optional
 
 import numpy as np
@@ -97,7 +102,7 @@ def parse_args() -> Config:
 
     # I/O
     p.add_argument("--save-every",       type=int,   default=50,               help="Snapshot interval in gens (default: 50)")
-    p.add_argument("--output",           default="output_triangles",           help="Output directory (default: output_triangles)")
+    p.add_argument("--output",           default="output/triangles_ga",        help="Output directory (default: output/triangles_ga)")
     p.add_argument("--seed",             type=int,   default=42)
 
     a = p.parse_args()
@@ -157,7 +162,6 @@ def main() -> None:
     print(f"  Termination: {criteria}")
 
     print(f"\nEvolving {cfg.generations} generations...\n")
-    stop_reason = ""
     for gen in range(cfg.generations):
         best_fit, mean_fit = ga.step()
         print(
@@ -176,7 +180,6 @@ def main() -> None:
 
         stop, reason = ga.should_stop()
         if stop:
-            stop_reason = reason
             print(f"\n  Early stop at gen {gen+1}: {reason}")
             break
 

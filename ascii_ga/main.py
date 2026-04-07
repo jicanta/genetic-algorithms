@@ -3,13 +3,18 @@
 ASCII Art via Genetic Algorithm — entry point.
 
 Usage:
-    python main.py input.jpg
-    python main.py input.jpg --cols 100 --population 80 --generations 1000
-    python main.py input.jpg --font /path/to/Mono.ttf --font-size 12 --gif
+    python ascii_ga/main.py input.jpg
+    python ascii_ga/main.py input.jpg --cols 100 --population 80 --generations 1000
+    python ascii_ga/main.py input.jpg --font /path/to/Mono.ttf --font-size 12 --gif
 """
 
-import argparse
+import sys
 from pathlib import Path
+
+# Allow running as a script from the project root: python ascii_ga/main.py ...
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import argparse
 
 import numpy as np
 from PIL import Image
@@ -42,7 +47,7 @@ def parse_args() -> Config:
     p.add_argument("--font",         dest="font_path", default=None,    help="Path to TTF monospace font")
     p.add_argument("--font-size",    type=int,   default=12,            help="Font size in points (default: 12)")
     p.add_argument("--save-every",   type=int,   default=50,            help="Snapshot interval in gens (default: 50)")
-    p.add_argument("--output",       default="output",                  help="Output directory (default: output)")
+    p.add_argument("--output",       default="output/ascii_ga",         help="Output directory (default: output/ascii_ga)")
     p.add_argument("--elite",        type=int,   default=5,             help="Elite count (default: 5)")
     p.add_argument("--tournament-k", type=int,   default=5,             help="Tournament size (default: 5)")
     p.add_argument("--crossover-prob", type=float, default=0.8,         help="Crossover probability (default: 0.8)")

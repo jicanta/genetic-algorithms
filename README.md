@@ -99,6 +99,65 @@ python ascii_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens 100
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `--cols` | `80` | Columnas ASCII |
+| `--population` | `80` | Tamaño de la población |
+| `--generations` | `500` | Generaciones |
+| `--mutation` | `0.02` | Tasa de mutación por celda |
+| `--font` | *(auto)* | Ruta a fuente TTF monoespaciada |
+| `--font-size` | `12` | Tamaño de fuente en puntos |
+| `--save-every` | `50` | Guardar snapshot cada N generaciones |
+| `--output` | `output/` | Directorio de salida |
+| `--elite` | `5` | Individuos élite por generación |
+| `--tournament-k` | `5` | Tamaño del torneo de selección |
+| `--charset` | `@%#*+=-:. ` | Set de caracteres (oscuro→claro) |
+| `--char-aspect` | *(auto)* | Relación cell_w/cell_h para corregir proporción |
+| `--gif` | *(flag)* | Exportar `evolution.gif` |
+| `--seed` | `42` | Semilla aleatoria |
+| `--no-plots` | *(flag)* | No generar gráficos PNG de la corrida |
+| `--graphs-only` | *(flag)* | Guardar solo métricas/gráficos, sin imágenes ni snapshots |
+| `--repeats` | `5` | Cantidad de repeticiones por método en `triangles_ga/run_triangles_suite.py` |
+
+### Ejemplos
+
+```bash
+# Ejecución básica
+python3 main.py imagen.jpg
+
+# Mayor resolución y más generaciones
+python3 main.py imagen.jpg --cols 120 --generations 2000 --population 100
+
+# Exportar evolución como GIF
+python3 main.py imagen.jpg --save-every 25 --gif
+
+# Fuente personalizada
+python3 main.py imagen.jpg --font /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf --font-size 10
+
+# Suite de gráficos para el ejercicio 2
+python3 triangles_ga/run_triangles_suite.py imagen.jpg --repeats 5 --graphs-only
+```
+
+---
+
+## Cómo funciona
+
+A diferencia de un conversor ASCII clásico (que mapea brillo local → caracter), este algoritmo hace búsqueda global:
+
+1. **Representación:** cada individuo es una grilla de índices al charset.
+2. **Renderizado:** la grilla se convierte en imagen pegando los glifos reales de la fuente.
+3. **Fitness:** MSE entre la imagen renderizada y la imagen objetivo (menor = mejor).
+4. **Evolución:** selección por torneo, cruce uniforme o por bloque rectangular, mutación con sesgo al vecino en orden de oscuridad.
+5. **Warm start:** mitad de la población inicial viene de un mapeo greedy de brillo; la otra mitad es aleatoria.
+
+### Operadores genéticos
+
+- **Selección:** torneo determinístico de tamaño `k`
+- **Cruce:** uniforme por celda (mezcla fina) o por bloque rectangular (preserva coherencia espacial), alternados al azar
+- **Mutación:** 70% paso ±1/2 en orden de oscuridad medida (búsqueda local), 30% caracter aleatorio (exploración)
+- **Elitismo:** los top-N pasan sin modificar a la siguiente generación
+
+---
+
+## Output
 | `--cols` | `80` | ASCII grid columns |
 | `--population` | `80` | Population size |
 | `--generations` | `500` | Max generations |
@@ -131,6 +190,40 @@ output/ascii_ga/
     ├── gen_00050.txt
     ├── gen_00050.png
     └── ...
+```
+
+```
+graphs/
+└── nombre_imagen/
+    ├── selection/
+    │   ├── selection_tournament_det/
+    │   │   ├── run_1/
+    │   │   │   ├── metrics.csv            # Métricas por generación de esa corrida
+    │   │   │   └── run_metadata.json      # Configuración y resumen final de esa corrida
+    │   │   └── ...
+    │   └── graphs/
+    │       ├── best_mse_by_run.png                # MSE final de cada corrida individual
+    │       ├── selection_final_fitness_bar.png    # Fitness final promedio por método de selección
+    │       ├── selection_mean_curve.png           # Evolución promedio del best fitness por selección
+    │       └── selection_runtime_bar.png          # Tiempo total promedio por método de selección
+    ├── crossover/
+    │   └── graphs/
+    │       ├── best_mse_by_run.png                # MSE final de cada corrida individual
+    │       ├── crossover_final_fitness_bar.png    # Fitness final promedio por crossover
+    │       ├── crossover_mean_curve.png           # Evolución promedio del best fitness por crossover
+    │       └── crossover_runtime_bar.png          # Tiempo total promedio por crossover
+    ├── mutation/
+    │   └── graphs/
+    │       ├── best_mse_by_run.png                # MSE final de cada corrida individual
+    │       ├── mutation_final_fitness_bar.png     # Fitness final promedio por mutación
+    │       ├── mutation_mean_curve.png            # Evolución promedio del best fitness por mutación
+    │       └── mutation_runtime_bar.png           # Tiempo total promedio por mutación
+    └── survival/
+        └── graphs/
+            ├── best_mse_by_run.png                # MSE final de cada corrida individual
+            ├── survival_final_fitness_bar.png     # Fitness final promedio por estrategia de supervivencia
+            ├── survival_mean_curve.png            # Evolución promedio del best fitness por supervivencia
+            └── survival_runtime_bar.png           # Tiempo total promedio por estrategia de supervivencia
 ```
 
 ---

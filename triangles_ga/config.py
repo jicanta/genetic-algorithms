@@ -70,4 +70,6 @@ class Config:
     # --- I/O ---
     save_every: int = 50
     output_dir: str = "output_triangles"
+    no_plots: bool = False
+    graphs_only: bool = False
     seed: int = 42

@@ -91,6 +91,7 @@ class TriangleGA:
         self.fitnesses: np.ndarray = np.empty(0)
         self._best_genome: Optional[np.ndarray] = None
         self._best_fitness: float = float("inf")
+        self.history: list[dict[str, float]] = []
 
         # Termination tracking
         self._stagnation_counter: int = 0
@@ -110,6 +111,7 @@ class TriangleGA:
         ]
         self.fitnesses = np.array([self._eval(ind) for ind in self.population])
         self._sync_best()
+        self._record_history(generation=0)
 
     def step(self) -> tuple[float, float]:
         """
@@ -145,6 +147,7 @@ class TriangleGA:
 
         self._sync_best()
         self._generation += 1
+        self._record_history(generation=self._generation)
         return self._best_fitness, float(self.fitnesses.mean())
 
     # ── Internal helpers ──────────────────────────────────────────────────────
@@ -259,3 +262,12 @@ class TriangleGA:
             self._last_improved_fitness = self._best_fitness
         else:
             self._stagnation_counter += 1
+
+    def _record_history(self, generation: int) -> None:
+        """Store per-generation metrics for later plotting/export."""
+        self.history.append({
+            "generation": float(generation),
+            "best": float(self._best_fitness),
+            "mean": float(self.fitnesses.mean()),
+            "std": float(self.fitnesses.std()),
+        })

@@ -10,6 +10,7 @@ Usage:
 """
 
 import sys
+import time
 from pathlib import Path
 
 # Allow running as a script from the project root: python triangles_ga/main.py ...
@@ -24,6 +25,7 @@ from PIL import Image
 from triangles_ga.config import Config
 from triangles_ga.ga import TriangleGA
 from triangles_ga.io import save_result
+from triangles_ga.plots import export_history_csv, export_run_metadata, save_run_plots
 
 
 def load_target(image_path: str, img_size: Optional[int]) -> tuple[np.ndarray, int, int]:
@@ -56,54 +58,68 @@ def parse_args() -> Config:
         epilog=__doc__,
     )
     # Problem
-    p.add_argument("image",                                                      help="Input image path")
-    p.add_argument("--n-triangles",      type=int,   default=50,                help="Number of triangles (default: 50)")
-    p.add_argument("--img-size",         type=int,   default=None,              help="Resize longest side to this px (default: keep original)")
+    p.add_argument("image", help="Input image path")
+    p.add_argument("--n-triangles", type=int, default=50, help="Number of triangles (default: 50)")
+    p.add_argument("--img-size", type=int, default=None, help="Resize longest side to this px (default: keep original)")
 
     # GA core
-    p.add_argument("--population",       type=int,   default=80,                help="Population size (default: 80)")
-    p.add_argument("--generations",      type=int,   default=500,               help="Generations (default: 500)")
-    p.add_argument("--elite",            type=int,   default=5,                 help="Elite count preserved per gen (default: 5)")
+    p.add_argument("--population", type=int, default=80, help="Population size (default: 80)")
+    p.add_argument("--generations", type=int, default=500, help="Generations (default: 500)")
+    p.add_argument("--elite", type=int, default=5, help="Elite count preserved per gen (default: 5)")
 
     # Selection
-    p.add_argument("--selection",        default="tournament_det",
-                   choices=["tournament_det", "tournament_prob", "roulette", "universal", "boltzmann", "ranking"],
-                   help="Selection method (default: tournament_det)")
-    p.add_argument("--tournament-k",     type=int,   default=5,                help="Tournament size (default: 5)")
-    p.add_argument("--tournament-prob",  type=float, default=0.75,             help="Win probability for probabilistic tournament (default: 0.75)")
-    p.add_argument("--boltzmann-t-init", type=float, default=100.0,            help="Initial Boltzmann temperature (default: 100.0)")
-    p.add_argument("--boltzmann-t-min",  type=float, default=1.0,              help="Minimum Boltzmann temperature (default: 1.0)")
+    p.add_argument(
+        "--selection",
+        default="tournament_det",
+        choices=["tournament_det", "tournament_prob", "roulette", "universal", "boltzmann", "ranking"],
+        help="Selection method (default: tournament_det)",
+    )
+    p.add_argument("--tournament-k", type=int, default=5, help="Tournament size (default: 5)")
+    p.add_argument("--tournament-prob", type=float, default=0.75, help="Win probability for probabilistic tournament (default: 0.75)")
+    p.add_argument("--boltzmann-t-init", type=float, default=100.0, help="Initial Boltzmann temperature (default: 100.0)")
+    p.add_argument("--boltzmann-t-min", type=float, default=1.0, help="Minimum Boltzmann temperature (default: 1.0)")
 
     # Crossover
-    p.add_argument("--crossover",        default="uniform",
-                   choices=["uniform", "one_point", "two_point", "annular"],
-                   help="Crossover method (default: uniform)")
-    p.add_argument("--crossover-prob",   type=float, default=0.8,              help="Crossover probability (default: 0.8)")
+    p.add_argument(
+        "--crossover",
+        default="uniform",
+        choices=["uniform", "one_point", "two_point", "annular"],
+        help="Crossover method (default: uniform)",
+    )
+    p.add_argument("--crossover-prob", type=float, default=0.8, help="Crossover probability (default: 0.8)")
 
     # Mutation
-    p.add_argument("--mutation",         default="uniform",
-                   choices=["uniform", "gen", "multigen", "non_uniform"],
-                   help="Mutation method (default: uniform)")
-    p.add_argument("--mutation-rate",    type=float, default=0.02,             help="Per-gene mutation probability (default: 0.02)")
-    p.add_argument("--mutation-sigma",   type=float, default=0.05,             help="Mutation noise std (default: 0.05)")
-    p.add_argument("--multigen-max",     type=int,   default=5,                help="Max genes mutated per call for multigen (default: 5)")
+    p.add_argument(
+        "--mutation",
+        default="uniform",
+        choices=["uniform", "gen", "multigen", "non_uniform"],
+        help="Mutation method (default: uniform)",
+    )
+    p.add_argument("--mutation-rate", type=float, default=0.02, help="Per-gene mutation probability (default: 0.02)")
+    p.add_argument("--mutation-sigma", type=float, default=0.05, help="Mutation noise std (default: 0.05)")
+    p.add_argument("--multigen-max", type=int, default=5, help="Max genes mutated per call for multigen (default: 5)")
 
     # Survival
-    p.add_argument("--survival",         default="exclusive",
-                   choices=["exclusive", "additive"],
-                   help="Survival strategy (default: exclusive)")
+    p.add_argument(
+        "--survival",
+        default="exclusive",
+        choices=["exclusive", "additive"],
+        help="Survival strategy (default: exclusive)",
+    )
 
     # Termination
-    p.add_argument("--stop-stagnation",  action="store_true",                 help="Stop if no improvement for --stagnation-gens generations")
-    p.add_argument("--stagnation-gens",  type=int,   default=50,              help="Stagnation window in generations (default: 50)")
-    p.add_argument("--stagnation-delta", type=float, default=0.5,             help="Minimum MSE improvement to reset stagnation counter (default: 0.5)")
-    p.add_argument("--stop-convergence", action="store_true",                 help="Stop if population fitness std drops below threshold")
-    p.add_argument("--convergence-thr",  type=float, default=5.0,             help="Fitness std threshold for convergence stop (default: 5.0)")
+    p.add_argument("--stop-stagnation", action="store_true", help="Stop if no improvement for --stagnation-gens generations")
+    p.add_argument("--stagnation-gens", type=int, default=50, help="Stagnation window in generations (default: 50)")
+    p.add_argument("--stagnation-delta", type=float, default=0.5, help="Minimum MSE improvement to reset stagnation counter (default: 0.5)")
+    p.add_argument("--stop-convergence", action="store_true", help="Stop if population fitness std drops below threshold")
+    p.add_argument("--convergence-thr", type=float, default=5.0, help="Fitness std threshold for convergence stop (default: 5.0)")
 
     # I/O
-    p.add_argument("--save-every",       type=int,   default=50,               help="Snapshot interval in gens (default: 50)")
-    p.add_argument("--output",           default="output/triangles_ga",        help="Output directory (default: output/triangles_ga)")
-    p.add_argument("--seed",             type=int,   default=42)
+    p.add_argument("--save-every", type=int, default=50, help="Snapshot interval in gens (default: 50)")
+    p.add_argument("--output", default="output/triangles_ga", help="Output directory (default: output/triangles_ga)")
+    p.add_argument("--no-plots", action="store_true", help="Skip PNG charts generation (metrics CSV is still saved)")
+    p.add_argument("--graphs-only", action="store_true", help="Only save metrics/metadata/plots, skip best image/JSON and snapshots")
+    p.add_argument("--seed", type=int, default=42)
 
     a = p.parse_args()
     return Config(
@@ -132,18 +148,23 @@ def parse_args() -> Config:
         convergence_threshold=a.convergence_thr,
         save_every=a.save_every,
         output_dir=a.output,
+        no_plots=a.no_plots,
+        graphs_only=a.graphs_only,
         seed=a.seed,
     )
 
 
 def main() -> None:
     cfg = parse_args()
+    started_at = time.perf_counter()
 
     print(f"Loading target: {cfg.image_path}")
     target, img_w, img_h = load_target(cfg.image_path, cfg.img_size)
     print(f"  Image size: {img_w}×{img_h} px")
-    print(f"  Selection: {cfg.selection_method}  |  Crossover: {cfg.crossover_method}"
-          f"  |  Mutation: {cfg.mutation_method}  |  Survival: {cfg.survival_strategy}")
+    print(
+        f"  Selection: {cfg.selection_method}  |  Crossover: {cfg.crossover_method}"
+        f"  |  Mutation: {cfg.mutation_method}  |  Survival: {cfg.survival_strategy}"
+    )
 
     print(f"\nInitializing population ({cfg.population} individuals, {cfg.n_triangles} triangles each)...")
     ga = TriangleGA(cfg, target, img_w, img_h)
@@ -171,11 +192,9 @@ def main() -> None:
             flush=True,
         )
 
-        if (gen + 1) % cfg.save_every == 0:
+        if (gen + 1) % cfg.save_every == 0 and not cfg.graphs_only:
             best_genome, _ = ga.best
-            json_path, png_path = save_result(
-                best_genome, img_w, img_h, snap_dir, f"gen_{gen+1:05d}"
-            )
+            json_path, png_path = save_result(best_genome, img_w, img_h, snap_dir, f"gen_{gen+1:05d}")
             print(f"    → snapshot: {png_path}")
 
         stop, reason = ga.should_stop()
@@ -184,10 +203,45 @@ def main() -> None:
             break
 
     best_genome, best_fitness = ga.best
-    json_path, png_path = save_result(best_genome, img_w, img_h, out_dir, "best")
     print(f"\nFinal best MSE: {best_fitness:.2f}")
-    print(f"Saved → {json_path}")
-    print(f"Saved → {png_path}")
+    if not cfg.graphs_only:
+        json_path, png_path = save_result(best_genome, img_w, img_h, out_dir, "best")
+        print(f"Saved → {json_path}")
+        print(f"Saved → {png_path}")
+
+    metrics_path = export_history_csv(ga.history, out_dir)
+    runtime_seconds = time.perf_counter() - started_at
+    metadata_path = export_run_metadata(
+        {
+            "label": out_dir.name,
+            "image_path": cfg.image_path,
+            "img_w": img_w,
+            "img_h": img_h,
+            "population": cfg.population,
+            "generations_requested": cfg.generations,
+            "generations_completed": len(ga.history) - 1,
+            "n_triangles": cfg.n_triangles,
+            "selection_method": cfg.selection_method,
+            "crossover_method": cfg.crossover_method,
+            "mutation_method": cfg.mutation_method,
+            "survival_strategy": cfg.survival_strategy,
+            "best_mse": float(best_fitness),
+            "runtime_seconds": runtime_seconds,
+            "seed": cfg.seed,
+        },
+        out_dir,
+    )
+    print(f"Saved → {metrics_path}")
+    print(f"Saved → {metadata_path}")
+
+    if not cfg.no_plots:
+        try:
+            plot_paths = save_run_plots(ga.history, out_dir / "graphs")
+            for plot_path in plot_paths:
+                print(f"Saved → {plot_path}")
+        except ImportError:
+            print("Warning: plots require matplotlib  →  python3 -m pip install matplotlib")
+
     print("\nDone.")
 
 

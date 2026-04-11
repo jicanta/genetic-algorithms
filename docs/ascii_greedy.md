@@ -1,181 +1,226 @@
 # ASCII Greedy
 
-Este documento describe la variante greedy de arte ASCII implementada en [`main_ascii_greedy.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/main_ascii_greedy.py).
+Este documento describe la variante greedy implementada en [`ascii_ga/main_greedy.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/main_greedy.py).
 
-La idea es aproximar una imagen usando una grilla de caracteres, pero sin algoritmo genético. En vez de evolucionar una población, se resuelve directamente qué carácter poner en cada celda.
+La idea es aproximar una imagen como arte ASCII sin algoritmo genético, pero usando una heurística visual más fuerte que el matching puro por SSE.
+
+Entry point:
+
+- [`ascii_ga/main_greedy.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/main_greedy.py)
+
+Comandos típicos:
+
+```bash
+python ascii_ga/main_greedy.py images/photo.jpg
+python ascii_ga/main_greedy.py images/photo.jpg --cols 120
+python ascii_ga/main_greedy.py images/photo.jpg --edge-weight 0 --neighbor-weight 0 --dither-strength 0
+```
 
 ## 1. Objetivo
 
 Entrada:
 
-- una imagen cualquiera
+- una imagen objetivo
 - una fuente monoespaciada
-- un conjunto de caracteres ASCII
+- un charset permitido
 
 Salida:
 
-- una matriz de caracteres
-- su render en PNG
+- una grilla ASCII
+- su render PNG
 
-La salida se construye bloque por bloque: para cada celda de la grilla, se elige el carácter cuyo glifo renderizado minimiza el error contra ese bloque de la imagen.
+La construcción sigue siendo greedy, pero el criterio de elección de cada celda combina tono, estructura y continuidad local.
 
 ## 2. Preprocesamiento
 
-Antes del matching se hacen dos cosas.
-
 ### 2.1. Cache de glifos
 
-Para cada carácter del `charset`, el programa renderiza su glifo real con PIL sobre una celda fija de tamaño `(cell_h, cell_w)`.
+Cada carácter del `charset` se renderiza una vez en una celda fija `(cell_h, cell_w)`.
 
-Eso produce un tensor:
+Eso produce:
 
 ```text
 glyphs.shape = (n_chars, cell_h, cell_w)
 ```
 
-Cada entrada contiene la imagen en grises del carácter tal como se vería en la salida final.
+Cada glifo se guarda como imagen en grises.
 
 ### 2.2. Imagen objetivo
 
 La imagen de entrada:
 
 - se convierte a escala de grises
-- se redimensiona exactamente al tamaño del canvas ASCII final
+- se redimensiona al tamaño final del canvas ASCII
 
-Si la grilla ASCII tiene `rows x cols`, entonces la imagen final queda de tamaño:
+Si la grilla tiene `rows x cols`, entonces la imagen final queda de tamaño:
 
 ```text
 (rows * cell_h, cols * cell_w)
 ```
 
-Eso permite comparar pixel a pixel sin reescalar durante el matching.
+Luego se parte en bloques no superpuestos de tamaño `(cell_h, cell_w)`.
 
-## 3. Formulación exacta
+## 3. Score híbrido por celda
 
-La implementación actual usa directamente matching en grises contra los glifos renderizados.
-
-Después del resize, la imagen objetivo queda dividida implícitamente en bloques de tamaño `(cell_h, cell_w)`. Cada uno de esos bloques corresponde a una celda ASCII.
-
-El problema que se resuelve es:
-
-- renderizar la salida final pegando glifos independientes
-- medir error total como suma de errores locales por celda
-- elegir, para cada celda, el carácter que minimiza ese error local
-
-La métrica usada es SSE, o equivalentemente MSE porque todas las celdas tienen el mismo tamaño.
-
-## 4. Algoritmo
-
-Para cada celda `(r, c)`:
-
-1. se extrae el bloque objetivo correspondiente
-2. se compara contra todos los glifos renderizados
-3. se elige el carácter con menor error cuadrático
-
-Formalmente, si:
-
-- `B_rc` es el bloque objetivo de la celda `(r, c)`
-- `G_k` es el glifo del carácter `k`
-
-entonces se elige:
+Para cada bloque del target y para cada glifo candidato se calcula:
 
 ```text
-argmin_k  SSE(B_rc, G_k)
+score = alpha * tone_error
+      + beta  * edge_error
+      + gamma * neighbor_inconsistency
 ```
 
 donde:
 
-```text
-SSE(B, G) = sum((B - G)^2)
-```
+- `tone_error` compara intensidades en grises pixel a pixel
+- `edge_error` compara estructura local usando Sobel `gx` y `gy`
+- `neighbor_inconsistency` penaliza transiciones feas respecto de los vecinos ya elegidos
 
-Como todas las celdas tienen el mismo tamaño, minimizar `SSE` o `MSE` por celda es equivalente.
+### 3.1. Tone Error
 
-## 5. Por qué este algoritmo es óptimo
-
-El render ASCII final se construye pegando celdas independientes. Entonces el error total contra la imagen objetivo es:
+Es el error cuadrático medio entre el bloque actual y el glifo candidato:
 
 ```text
-Error total = suma de errores de cada celda
+tone_error = mean((block - glyph)^2)
 ```
 
-No hay solapamiento entre glifos ni interacción entre bloques en la imagen renderizada.
+Esto sigue capturando la parte más importante: densidad y forma general del carácter.
 
-Entonces:
+### 3.2. Edge Error
 
-- cada término del error depende solo del carácter elegido en esa celda
-- minimizar cada celda por separado minimiza la suma total
+El tono por sí solo no distingue bien orientación. Por ejemplo:
 
-Es exactamente el mismo principio que minimizar una función separable:
+- `-` sugiere borde horizontal
+- `|` sugiere borde vertical
+- `/` y `\` sugieren diagonales
+
+Por eso se calcula un descriptor Sobel para cada bloque y para cada glifo:
 
 ```text
-f(x1, ..., xn) = g1(x1) + g2(x2) + ... + gn(xn)
+edge_feature = [gx, gy]
 ```
 
-Si cada `gk` depende solo de `xk`, la solución óptima global se obtiene minimizando cada `gk` por separado.
-
-En este problema:
-
-- `xk` = carácter elegido en una celda
-- `gk` = error del bloque correspondiente contra el glifo de ese carácter
-
-## 6. Cuándo deja de ser óptimo
-
-Esto deja de valer si la función objetivo agrega términos no separables, por ejemplo:
-
-- penalización por discontinuidad entre vecinos
-- restricciones globales sobre cantidad de caracteres
-- suavidad espacial
-- cualquier interacción entre celdas
-
-En esos casos ya no alcanza con resolver cada bloque de forma independiente.
-
-## 7. Implementación eficiente
-
-El matching no compara un bloque contra cada carácter con loops de Python anidados. En cambio, se vectoriza con NumPy.
-
-Cada bloque y cada glifo se aplana a un vector:
+Luego se compara con MSE:
 
 ```text
-block_vectors.shape = (rows * cols, cell_h * cell_w)
-glyph_vectors.shape = (n_chars, cell_h * cell_w)
+edge_error = mean((edge_block - edge_glyph)^2)
 ```
 
-Luego se calcula la matriz completa de errores usando:
+Esto hace que el greedy prefiera caracteres cuya estructura local se parezca a la de la imagen.
+
+### 3.3. Neighbor Inconsistency
+
+Si cada celda se eligiera solo por tono y borde, podrían aparecer uniones raras entre caracteres contiguos.
+
+Entonces, al elegir la celda `(r, c)`, se consideran los vecinos ya fijados:
+
+- izquierda `(r, c-1)`
+- arriba `(r-1, c)`
+
+La penalización compara el salto entre bordes de glifos con el salto real en la imagen objetivo a través de esa frontera.
+
+Idea:
+
+- si en el target la frontera es suave, se prefieren glifos con transición suave
+- si en el target hay una discontinuidad real, se permite una transición fuerte
+
+## 4. Dithering por difusión de error
+
+Después de elegir un glifo para una celda, se calcula el residual:
 
 ```text
-||b - g||^2 = ||b||^2 + ||g||^2 - 2 b·g
+residual = block_actual - glyph_elegido
 ```
 
-Eso permite obtener, para todas las celdas y todos los caracteres, el error cuadrático sin loops explícitos sobre píxeles.
+Ese residual se difunde a celdas futuras usando pesos estilo Floyd-Steinberg sobre la grilla de bloques:
 
-## 8. Diferencia con un greedy por brillo promedio
+- derecha: `7/16`
+- abajo-izquierda: `3/16`
+- abajo: `5/16`
+- abajo-derecha: `1/16`
 
-Esto no es lo mismo que:
+Eso no cambia el glifo ya elegido, pero modifica el bloque de trabajo de las próximas celdas para compensar error acumulado. En la práctica funciona como un dithering a nivel celda.
 
-1. calcular brillo promedio del bloque
-2. elegir un carácter con oscuridad parecida
+## 5. Orden de resolución
 
-Ese método es solo una aproximación rápida.
+La grilla se resuelve en orden fila por fila, de izquierda a derecha y de arriba hacia abajo.
 
-La formulación exacta compara el bitmap completo del bloque contra el bitmap completo de cada glifo. Eso importa porque dos caracteres pueden tener tinta total parecida pero geometría distinta.
+Ese orden es importante porque:
 
-Ejemplos típicos:
+- los vecinos izquierdo y superior ya están decididos
+- la difusión de error solo se propaga a celdas futuras
 
-- `-`
-- `|`
-- `.`
-- `+`
+## 6. Diferencia con el greedy separable exacto
 
-Pueden tener coberturas similares, pero distribuciones espaciales muy diferentes.
+Si el score fuera solo:
 
-## 9. Limitaciones prácticas
+```text
+score = tone_error
+```
 
-Aunque esta solución es óptima para la formulación separable, eso no significa que siempre produzca la mejor imagen perceptual.
+entonces el problema sería separable por celdas y la solución por bloque sería globalmente óptima para ese objetivo.
 
-Sigue habiendo límites inevitables:
+Pero al agregar:
 
-- la resolución ASCII puede ser demasiado baja para detalles chicos
-- si el resize destruye un detalle, el algoritmo no puede recuperarlo
-- el criterio minimiza error numérico pixel a pixel, no semántica visual
-- puede elegir caracteres raros si eso baja el error
+- bordes
+- consistencia con vecinos
+- dithering
+
+el problema deja de ser separable.
+
+Entonces esta versión ya no es “óptima” en sentido matemático para una función aditiva simple. Lo que gana es calidad perceptual.
+
+## 7. Complejidad
+
+Si:
+
+- hay `R * C` celdas
+- hay `K` caracteres
+- cada glifo mide `H * W`
+
+entonces el costo dominante sigue siendo comparar cada bloque contra todos los glifos:
+
+```text
+O(R * C * K * H * W)
+```
+
+El término de vecinos agrega poco costo extra porque solo usa fronteras izquierda y superior.
+
+## 8. Parámetros útiles
+
+El script expone estos pesos:
+
+- `--tone-weight`
+- `--edge-weight`
+- `--neighbor-weight`
+- `--dither-strength`
+
+Defaults actuales:
+
+- `tone_weight = 1.0`
+- `edge_weight = 0.20`
+- `neighbor_weight = 0.10`
+- `dither_strength = 0.15`
+
+Valores más altos de `edge` y `neighbor` suelen mejorar orientación y continuidad, pero si son demasiado altos pueden empeorar el MSE global o introducir patrones artificiales.
+
+Si se usan:
+
+```text
+edge_weight = 0
+neighbor_weight = 0
+dither_strength = 0
+```
+
+entonces el algoritmo se reduce al matching puro por SSE por bloque.
+
+Ese modo exacto sirve como referencia útil para comparar cuánto aportan realmente las heurísticas perceptuales en una imagen dada.
+
+## 9. Limitaciones
+
+Aunque visualmente suele ser mejor que el matching puro por tono:
+
+- sigue sin modelar semántica global
+- depende bastante de la resolución ASCII
+- puede necesitar ajuste de pesos según la imagen
+- detalles muy chicos pueden perderse igual si el resize ya los destruyó

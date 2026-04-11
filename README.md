@@ -197,10 +197,12 @@ Each individual is a float32 array of shape `(N_triangles, 10)` — one row per 
 
 | Method | Description |
 |---|---|
-| `uniform` | Per-gene Gaussian noise with fixed sigma *(default)* |
-| `gen` | Exactly one gene mutated per call |
+| `uniform` | Per-gene Gaussian noise with typed geometry/color/alpha sigma *(default)* |
+| `gen` | Exactly one gene mutated per call, using its gene-type sigma |
 | `multigen` | 1 to `--multigen-max` randomly selected genes mutated |
-| `non_uniform` | Gaussian noise with sigma decaying over generations |
+| `non_uniform` | Typed Gaussian noise with sigma decaying over generations |
+
+Triangle draw order is also mutable via `--layer-mutation-rate`, because alpha compositing makes earlier/later triangles produce different images even with the same shapes and colors.
 
 **Survival** (`--survival`):
 
@@ -254,6 +256,11 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--mutation-rate` | `0.02` | Per-gene mutation probability |
 | `--mutation-sigma` | `0.05` | Mutation noise std |
 | `--multigen-max` | `5` | Max genes for multigen mutation |
+| `--geometry-mutation-scale` | `1.0` | Sigma multiplier for triangle vertex genes |
+| `--color-mutation-scale` | `0.5` | Sigma multiplier for RGB genes |
+| `--alpha-mutation-scale` | `0.5` | Sigma multiplier for opacity genes |
+| `--layer-mutation-rate` | `0.02` | Per-individual chance to mutate triangle draw order |
+| `--layer-mutation-max-shift` | `8` | Max positions for move-order mutation |
 | `--survival` | `exclusive` | Survival strategy (see table above) |
 | `--workers` | `0` | Parallel processes for fitness eval; `0` = all CPU cores |
 | `--fitness-sample` | `1.0` | Fraction of pixels used for MSE (e.g. `0.5` for 2x speedup) |

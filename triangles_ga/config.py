@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -15,16 +15,48 @@ class Config:
             raise ValueError(f"generations must be >= 1, got {self.generations}")
         if not 0.0 <= self.mutation_rate <= 1.0:
             raise ValueError(f"mutation_rate must be in [0, 1], got {self.mutation_rate}")
+        if self.mutation_sigma < 0.0:
+            raise ValueError(f"mutation_sigma must be >= 0, got {self.mutation_sigma}")
         if not 0.0 <= self.crossover_prob <= 1.0:
             raise ValueError(f"crossover_prob must be in [0, 1], got {self.crossover_prob}")
         if self.n_triangles < 1:
             raise ValueError(f"n_triangles must be >= 1, got {self.n_triangles}")
+        if self.n_triangles < 2 and self.crossover_method in ("one_point", "annular"):
+            raise ValueError(
+                f"crossover_method={self.crossover_method!r} requires at least 2 triangles"
+            )
         if self.init_method not in ("random", "color_sample"):
             raise ValueError(f"init_method must be 'random' or 'color_sample', got {self.init_method!r}")
+        if self.tournament_k < 1:
+            raise ValueError(f"tournament_k must be >= 1, got {self.tournament_k}")
+        if not 0.0 < self.tournament_prob <= 1.0:
+            raise ValueError(f"tournament_prob must be in (0, 1], got {self.tournament_prob}")
+        if self.boltzmann_temp_init <= 0.0 or self.boltzmann_temp_min <= 0.0:
+            raise ValueError("Boltzmann temperatures must be > 0")
+        if self.multigen_max_genes < 1:
+            raise ValueError(f"multigen_max_genes must be >= 1, got {self.multigen_max_genes}")
+        if self.geometry_mutation_scale < 0.0:
+            raise ValueError(f"geometry_mutation_scale must be >= 0, got {self.geometry_mutation_scale}")
+        if self.color_mutation_scale < 0.0:
+            raise ValueError(f"color_mutation_scale must be >= 0, got {self.color_mutation_scale}")
+        if self.alpha_mutation_scale < 0.0:
+            raise ValueError(f"alpha_mutation_scale must be >= 0, got {self.alpha_mutation_scale}")
+        if not 0.0 <= self.layer_mutation_rate <= 1.0:
+            raise ValueError(f"layer_mutation_rate must be in [0, 1], got {self.layer_mutation_rate}")
+        if self.layer_mutation_max_shift < 1:
+            raise ValueError(f"layer_mutation_max_shift must be >= 1, got {self.layer_mutation_max_shift}")
+        if self.img_size is not None and self.img_size < 1:
+            raise ValueError(f"img_size must be >= 1 when provided, got {self.img_size}")
         if self.stagnation_gens < 1:
             raise ValueError(f"stagnation_gens must be >= 1, got {self.stagnation_gens}")
         if self.convergence_threshold <= 0.0:
             raise ValueError(f"convergence_threshold must be > 0, got {self.convergence_threshold}")
+        if self.workers < 0:
+            raise ValueError(f"workers must be >= 0, got {self.workers}")
+        if not 0.0 < self.fitness_sample <= 1.0:
+            raise ValueError(f"fitness_sample must be in (0, 1], got {self.fitness_sample}")
+        if self.save_every < 1:
+            raise ValueError(f"save_every must be >= 1, got {self.save_every}")
 
     # --- Problem parameters ---
     n_triangles: int = 50
@@ -55,6 +87,11 @@ class Config:
     mutation_rate: float = 0.02          # probability per gene (uniform / non_uniform / multigen)
     mutation_sigma: float = 0.05         # noise std (uniform / non_uniform / multigen)
     multigen_max_genes: int = 5          # max genes mutated per individual (multigen)
+    geometry_mutation_scale: float = 1.0 # sigma multiplier for vertex coordinates
+    color_mutation_scale: float = 0.5    # sigma multiplier for RGB genes
+    alpha_mutation_scale: float = 0.5    # sigma multiplier for opacity genes
+    layer_mutation_rate: float = 0.02    # per-individual chance to mutate draw order
+    layer_mutation_max_shift: int = 8    # max positions for move-order mutation
 
     # --- Survival strategy ---
     survival_strategy: str = "exclusive"

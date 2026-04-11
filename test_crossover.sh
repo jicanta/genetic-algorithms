@@ -19,7 +19,7 @@ for IMAGE in "${IMAGES[@]}"; do
     for CX in "${CROSSOVERS[@]}"; do
         OUTPUT="output_tests/${IMAGE_NAME}/crossover_${CX}"
         echo "=== $CX | $IMAGE_NAME ==="
-        python3 main_triangles.py "$IMAGE" \
+        python3 triangles_ga/main.py "$IMAGE" \
             --crossover      "$CX" \
             --selection      tournament_det \
             --mutation       uniform \

@@ -19,7 +19,7 @@ for IMAGE in "${IMAGES[@]}"; do
     for MUT in "${MUTATIONS[@]}"; do
         OUTPUT="output_tests/${IMAGE_NAME}/mutation_${MUT}"
         echo "=== $MUT | $IMAGE_NAME ==="
-        python3 main_triangles.py "$IMAGE" \
+        python3 triangles_ga/main.py "$IMAGE" \
             --mutation       "$MUT" \
             --selection      tournament_det \
             --crossover      two_point \

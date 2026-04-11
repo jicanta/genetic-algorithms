@@ -54,10 +54,12 @@ from .genome import random_genome, color_sampled_genome
 from .operators import (
     # selection
     tournament_det, tournament_prob, roulette, universal, boltzmann, ranking,
+    universal_batch,
     # crossover
     crossover_uniform, crossover_one_point, crossover_two_point, crossover_annular,
     # mutation
     mutate_uniform, mutate_gen, mutate_multigen, mutate_non_uniform,
+    mutate_layer_order,
 )
 
 _SELECTION = {
@@ -274,16 +276,39 @@ class TriangleGA:
             max_genes=cfg.multigen_max_genes,
             generation=self._generation,
             max_generations=cfg.generations,
+            geometry_sigma_scale=cfg.geometry_mutation_scale,
+            color_sigma_scale=cfg.color_mutation_scale,
+            alpha_sigma_scale=cfg.alpha_mutation_scale,
         )
 
     def _generate_offspring(self, n: int) -> tuple[list[np.ndarray], list[float]]:
         """Produce n offspring via selection → crossover → mutation, then evaluate in parallel."""
         cfg = self.config
         offspring: list[np.ndarray] = []
+        sus_parents: list[np.ndarray] = []
+        sus_pos = 0
+
+        def next_parent() -> np.ndarray:
+            nonlocal sus_parents, sus_pos
+            if cfg.selection_method != "universal":
+                return self._select()
+
+            if sus_pos >= len(sus_parents):
+                parent_slots = max(2 * ((n + 1) // 2), 2)
+                sus_parents = universal_batch(
+                    population=self.population,
+                    fitnesses=self.fitnesses,
+                    n=parent_slots,
+                    rng=self.rng,
+                )
+                sus_pos = 0
+            parent = sus_parents[sus_pos]
+            sus_pos += 1
+            return parent
 
         while len(offspring) < n:
-            p1 = self._select()
-            p2 = self._select()
+            p1 = next_parent()
+            p2 = next_parent()
 
             if self.rng.random() < cfg.crossover_prob:
                 c1, c2 = self._cross_fn(p1, p2, self.rng)
@@ -293,7 +318,14 @@ class TriangleGA:
             for child in (c1, c2):
                 if len(offspring) >= n:
                     break
-                offspring.append(self._mutate(child))
+                child = self._mutate(child)
+                child = mutate_layer_order(
+                    child,
+                    self.rng,
+                    layer_mutation_rate=cfg.layer_mutation_rate,
+                    layer_mutation_max_shift=cfg.layer_mutation_max_shift,
+                )
+                offspring.append(child)
 
         fits = self._eval_batch(offspring)
         return offspring, fits
@@ -350,7 +382,7 @@ class TriangleGA:
         """Evaluate a batch of genomes. Uses the persistent pool when available."""
         if self._pool is None or len(genomes) <= 1:
             # In-process path: call the worker function directly with local target
-            _worker_init(self.target, self.img_w, self.img_h, self._sample_mask)
+            _worker_init(self.target, self.img_w, self.img_h, self._sample_mask, self.config.renderer)
             return [_eval_genome(g) for g in genomes]
         chunksize = max(1, len(genomes) // self._workers)
         return list(self._pool.map(_eval_genome, genomes, chunksize=chunksize))

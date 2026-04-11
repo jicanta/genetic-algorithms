@@ -16,7 +16,7 @@ for IMAGE in "${IMAGES[@]}"; do
     for SEL in "${SELECTIONS[@]}"; do
         OUTPUT="output_tests/${IMAGE_NAME}/selection_${SEL}"
         echo "=== $SEL | $IMAGE_NAME ==="
-        python3 main_triangles.py "$IMAGE" \
+        python3 triangles_ga/main.py "$IMAGE" \
             --selection      "$SEL" \
             --n-triangles    $N_TRIANGLES \
             --population     $POPULATION \

@@ -106,6 +106,16 @@ def parse_args() -> Config:
     p.add_argument("--mutation-rate", type=float, default=0.02, help="Per-gene mutation probability (default: 0.02)")
     p.add_argument("--mutation-sigma", type=float, default=0.05, help="Mutation noise std (default: 0.05)")
     p.add_argument("--multigen-max", type=int, default=5, help="Max genes mutated per call for multigen (default: 5)")
+    p.add_argument("--geometry-mutation-scale", type=float, default=1.0,
+                   help="Sigma multiplier for triangle vertex genes (default: 1.0)")
+    p.add_argument("--color-mutation-scale", type=float, default=0.5,
+                   help="Sigma multiplier for RGB genes (default: 0.5)")
+    p.add_argument("--alpha-mutation-scale", type=float, default=0.5,
+                   help="Sigma multiplier for alpha genes (default: 0.5)")
+    p.add_argument("--layer-mutation-rate", type=float, default=0.02,
+                   help="Per-individual chance to mutate triangle draw order (default: 0.02)")
+    p.add_argument("--layer-mutation-max-shift", type=int, default=8,
+                   help="Max positions for move-order mutation (default: 8)")
 
     # Survival
     p.add_argument(
@@ -162,6 +172,11 @@ def parse_args() -> Config:
         mutation_rate=a.mutation_rate,
         mutation_sigma=a.mutation_sigma,
         multigen_max_genes=a.multigen_max,
+        geometry_mutation_scale=a.geometry_mutation_scale,
+        color_mutation_scale=a.color_mutation_scale,
+        alpha_mutation_scale=a.alpha_mutation_scale,
+        layer_mutation_rate=a.layer_mutation_rate,
+        layer_mutation_max_shift=a.layer_mutation_max_shift,
         survival_strategy=a.survival,
         stop_on_stagnation=a.stop_stagnation,
         stagnation_gens=a.stagnation_gens,

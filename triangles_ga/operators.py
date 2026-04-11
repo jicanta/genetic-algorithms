@@ -28,6 +28,7 @@ mutate_uniform       Per-gene Gaussian noise with fixed sigma. (baseline)
 mutate_gen           Exactly one gene mutated per call.
 mutate_multigen      Random number of genes mutated (up to max_genes).
 mutate_non_uniform   Gaussian noise with sigma that decays with generation progress.
+mutate_layer_order   Swap or move triangles in draw order.
 """
 
 import numpy as np
@@ -44,6 +45,31 @@ def _invert_fitnesses(fitnesses: np.ndarray) -> np.ndarray:
     """
     inv = 1.0 / (fitnesses + 1e-10)
     return inv / inv.sum()
+
+
+def _gene_sigma_scales(
+    genome: np.ndarray,
+    geometry_scale: float,
+    color_scale: float,
+    alpha_scale: float,
+) -> np.ndarray:
+    """Return per-gene sigma multipliers for coords, RGB, and alpha."""
+    scales = np.empty_like(genome, dtype=np.float32)
+    scales[:, :6] = geometry_scale
+    scales[:, 6:9] = color_scale
+    scales[:, 9] = alpha_scale
+    return scales
+
+
+def _scale_for_gene_index(
+    gene_index: np.ndarray,
+    geometry_scale: float,
+    color_scale: float,
+    alpha_scale: float,
+) -> np.ndarray:
+    """Map flattened gene indices to the corresponding sigma multiplier."""
+    col = gene_index % 10
+    return np.where(col < 6, geometry_scale, np.where(col < 9, color_scale, alpha_scale))
 
 
 # ─── Selection ────────────────────────────────────────────────────────────────
@@ -126,6 +152,28 @@ def universal(
     idx = int(np.searchsorted(cumulative, ptr))
     idx = min(idx, len(population) - 1)
     return population[idx]
+
+
+def universal_batch(
+    population: list[np.ndarray],
+    fitnesses: np.ndarray,
+    n: int,
+    rng: np.random.Generator,
+    **_kwargs,
+) -> list[np.ndarray]:
+    """
+    Stochastic Universal Sampling for a batch of parent slots.
+
+    Unlike roulette, SUS uses one random start plus evenly spaced pointers, so
+    the selected parent set has lower sampling variance across a generation.
+    """
+    probs = _invert_fitnesses(fitnesses)
+    cumulative = np.cumsum(probs)
+    start = rng.random() / n
+    pointers = start + np.arange(n, dtype=np.float64) / n
+    indices = np.searchsorted(cumulative, pointers, side="left")
+    indices = np.clip(indices, 0, len(population) - 1)
+    return [population[int(idx)] for idx in indices]
 
 
 def boltzmann(
@@ -266,17 +314,22 @@ def mutate_uniform(
     rng: np.random.Generator,
     mutation_rate: float = 0.02,
     mutation_sigma: float = 0.05,
+    geometry_sigma_scale: float = 1.0,
+    color_sigma_scale: float = 0.5,
+    alpha_sigma_scale: float = 0.5,
     **_kwargs,
 ) -> np.ndarray:
     """
-    Per-gene Gaussian mutation with fixed probability and sigma.
+    Per-gene Gaussian mutation with fixed probability and typed sigma.
 
     Each of the N*10 genes mutates independently with probability mutation_rate.
-    Noise is drawn from N(0, mutation_sigma) and the result is clamped to [0, 1].
+    Coordinates, RGB, and alpha use separate sigma multipliers because small
+    color/opacity changes are usually more useful than equally large jumps.
     """
     child = genome.copy()
     mask = rng.random(child.shape) < mutation_rate
-    noise = rng.normal(0.0, mutation_sigma, size=child.shape).astype(np.float32)
+    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    noise = rng.normal(0.0, mutation_sigma, size=child.shape).astype(np.float32) * scales
     child[mask] += noise[mask]
     np.clip(child, 0.0, 1.0, out=child)
     return child
@@ -286,6 +339,9 @@ def mutate_gen(
     genome: np.ndarray,
     rng: np.random.Generator,
     mutation_sigma: float = 0.05,
+    geometry_sigma_scale: float = 1.0,
+    color_sigma_scale: float = 0.5,
+    alpha_sigma_scale: float = 0.5,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -297,7 +353,10 @@ def mutate_gen(
     child = genome.copy()
     row = int(rng.integers(0, child.shape[0]))
     col = int(rng.integers(0, child.shape[1]))
-    child[row, col] += float(rng.normal(0.0, mutation_sigma))
+    scale = float(_scale_for_gene_index(
+        np.array([col]), geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale
+    )[0])
+    child[row, col] += float(rng.normal(0.0, mutation_sigma * scale))
     child[row, col] = float(np.clip(child[row, col], 0.0, 1.0))
     return child
 
@@ -307,6 +366,9 @@ def mutate_multigen(
     rng: np.random.Generator,
     max_genes: int = 5,
     mutation_sigma: float = 0.05,
+    geometry_sigma_scale: float = 1.0,
+    color_sigma_scale: float = 0.5,
+    alpha_sigma_scale: float = 0.5,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -319,7 +381,9 @@ def mutate_multigen(
     n_genes = int(rng.integers(1, max_genes + 1))
     flat = child.reshape(-1)
     indices = rng.integers(0, flat.size, size=n_genes)
-    flat[indices] += rng.normal(0.0, mutation_sigma, size=n_genes).astype(np.float32)
+    scales = _scale_for_gene_index(indices, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    noise = rng.normal(0.0, mutation_sigma, size=n_genes).astype(np.float32) * scales
+    flat[indices] += noise
     np.clip(flat, 0.0, 1.0, out=flat)
     return child
 
@@ -331,6 +395,9 @@ def mutate_non_uniform(
     mutation_sigma: float = 0.10,
     generation: int = 0,
     max_generations: int = 500,
+    geometry_sigma_scale: float = 1.0,
+    color_sigma_scale: float = 0.5,
+    alpha_sigma_scale: float = 0.5,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -348,7 +415,43 @@ def mutate_non_uniform(
 
     child = genome.copy()
     mask = rng.random(child.shape) < mutation_rate
-    noise = rng.normal(0.0, effective_sigma, size=child.shape).astype(np.float32)
+    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    noise = rng.normal(0.0, effective_sigma, size=child.shape).astype(np.float32) * scales
     child[mask] += noise[mask]
     np.clip(child, 0.0, 1.0, out=child)
     return child
+
+
+def mutate_layer_order(
+    genome: np.ndarray,
+    rng: np.random.Generator,
+    layer_mutation_rate: float = 0.02,
+    layer_mutation_max_shift: int = 8,
+) -> np.ndarray:
+    """
+    Mutate draw order by swapping two triangles or moving one nearby.
+
+    Alpha compositing makes order part of the phenotype. This operator lets the
+    GA refine occlusion without having to rediscover the triangle geometry.
+    """
+    if layer_mutation_rate <= 0.0 or genome.shape[0] < 2 or rng.random() >= layer_mutation_rate:
+        return genome
+
+    child = genome.copy()
+    n = child.shape[0]
+    if rng.random() < 0.5:
+        i, j = rng.choice(n, size=2, replace=False)
+        child[[i, j]] = child[[j, i]]
+        return child
+
+    i = int(rng.integers(0, n))
+    max_shift = min(layer_mutation_max_shift, n - 1)
+    shift = int(rng.integers(-max_shift, max_shift + 1))
+    if shift == 0:
+        shift = 1 if i < n - 1 else -1
+    j = int(np.clip(i + shift, 0, n - 1))
+
+    row = child[i].copy()
+    child = np.delete(child, i, axis=0)
+    child = np.insert(child, j, row, axis=0)
+    return child.astype(np.float32, copy=False)

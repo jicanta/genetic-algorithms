@@ -1,6 +1,15 @@
-# Ejercicio 1: Algoritmo Genético Actual para Arte ASCII
+# Ejercicio 1: Algoritmo Genético para Arte ASCII
 
 Este documento describe en profundidad cómo funciona la implementación actual del ejercicio 1 en `ascii_ga/`.
+
+Entry point principal:
+
+- [`ascii_ga/main.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/main.py)
+
+Baseline no evolutivo relacionado:
+
+- [`ascii_ga/main_greedy.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/main_greedy.py)
+- documentación: [`docs/ascii_greedy.md`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/docs/ascii_greedy.md)
 
 La idea general es aproximar una imagen en escala de grises usando una grilla de caracteres ASCII. Cada individuo del algoritmo genético representa una imagen ASCII completa. El fitness mide qué tan parecida es esa imagen renderizada a la imagen objetivo. A partir de esa comparación, el algoritmo selecciona mejores individuos, los cruza, los muta y repite el proceso hasta mejorar progresivamente la aproximación.
 
@@ -48,6 +57,8 @@ Esto es una decisión razonable para el ejercicio 1 porque:
 - permite cruzas y mutaciones locales
 - conserva estructura espacial 2D
 - hace fácil renderizar y evaluar el individuo
+
+A diferencia del baseline greedy, esta representación se usa dentro de una búsqueda global. El AG puede degradar una celda localmente en una generación si eso habilita una combinación mejor en generaciones posteriores.
 
 ## 3. Preprocesamiento de fuente e imagen
 
@@ -102,6 +113,13 @@ Ese individuo se construye así:
 
 Esto da una primera aproximación bastante razonable sin evolución.
 
+Importante: este warm start es deliberadamente simple y rápido. No es el mismo algoritmo que el baseline de [`ascii_ga/main_greedy.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/main_greedy.py).
+
+- `greedy_genome()` en [`ascii_ga/operators.py`](/home/jicanta/Desktop/tps-itba/sia/genetic-algorithms/ascii_ga/operators.py) usa brillo promedio y oscuridad medida
+- `main_greedy.py` usa un score híbrido perceptual con tono, bordes, continuidad local y dithering
+
+Eso permite que la inicialización sea barata, sin intentar resolver todo el problema por heurística sofisticada antes de arrancar la evolución.
+
 ### 4.2. Diversificación por ruido
 
 Ese individuo base no se copia directamente muchas veces. Se lo muta con niveles crecientes de ruido.
@@ -149,6 +167,8 @@ Esto hace que el fitness no evalúe solo brillo promedio por celda, sino la form
 
 Ese punto es importante: dos caracteres con oscuridad parecida pueden dibujar texturas distintas, y el fitness real captura esa diferencia.
 
+Esa es una de las razones por las que el AG puede mejorar claramente al warm start por brillo, incluso cuando ambos usan el mismo `charset`.
+
 ## 6. Selección de padres
 
 La implementación actual usa selección por torneo determinístico.
@@ -167,6 +187,8 @@ Esto se repite cada vez que hace falta un padre.
 - `k` grande: más explotación, convergencia más rápida, más riesgo de pérdida de diversidad
 
 Esta implementación no usa ruleta, ranking ni Boltzmann en `ascii_ga`. Para ejercicio 1 eso no es un problema conceptual, pero sí significa que el motor ASCII actual es una versión simplificada respecto a lo pedido para el ejercicio 2.
+
+Las variantes más configurables de selección y supervivencia quedaron concentradas en `triangles_ga`.
 
 ## 7. Cruza
 
@@ -252,6 +274,21 @@ Antes podían pasar tres cosas:
 - elegir aleatoriamente exactamente el mismo carácter actual
 
 Eso reducía la fuerza efectiva de mutación.
+
+## 8.4. Relación con el baseline greedy
+
+El baseline greedy actual es útil como referencia rápida porque construye una solución en una sola pasada.
+
+El AG sigue siendo valioso porque puede:
+
+- combinar regiones útiles de distintos individuos
+- corregir inconsistencias espaciales que un score local no captura bien
+- explorar soluciones que no aparecen naturalmente en una resolución secuencial fila por fila
+
+En la práctica:
+
+- `main_greedy.py` sirve como baseline rápido y reproducible
+- `main.py` sirve como búsqueda global de mayor costo pero con más capacidad de mejora
 
 ## 9. Elitismo y reemplazo generacional
 
@@ -409,6 +446,8 @@ En términos prácticos, es un AG bien alineado con el problema de arte ASCII, c
 
 ## 16. Archivos clave de la implementación
 
+- `ascii_ga/main.py`: CLI principal del AG
+- `ascii_ga/main_greedy.py`: baseline greedy no evolutivo
 - `ascii_ga/config.py`: hiperparámetros del algoritmo
 - `ascii_ga/font.py`: carga de fuente y construcción de glifos
 - `ascii_ga/image.py`: carga y resize de la imagen objetivo

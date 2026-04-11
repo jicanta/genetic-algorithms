@@ -104,7 +104,13 @@ _MUTATION = {
 
 
 def _build_saliency_weights(target: np.ndarray, saliency_weight: float) -> Optional[np.ndarray]:
-    """Weight perceptually important pixels more heavily in the fitness function.\n\n    Saliency = brightness^1.5 * saturation. Bright, saturated pixels are\n    perceptually dominant in any image — errors there are more visible than\n    errors in dark or grey areas. Disabled (plain MSE) when saliency_weight=0.\n    """
+    """
+    Weight perceptually important pixels more heavily in the fitness function.
+
+    Saliency = brightness^1.5 * saturation. Bright, saturated pixels are
+    perceptually dominant in any image — errors there are more visible than
+    errors in dark or grey areas. Disabled (plain MSE) when saliency_weight=0.
+    """
     if saliency_weight <= 0.0:
         return None
 
@@ -162,7 +168,7 @@ class TriangleGA:
         self._mutate_fn  = _MUTATION[config.mutation_method]
 
         # Number of parallel workers for fitness evaluation.
-        # 0 (default) → use all CPU cores; 1 → disable parallelism.
+        # 1 (default) → single-threaded in-process; 0 → use all CPU cores.
         self._workers: int = config.workers if config.workers > 0 else (os.cpu_count() or 1)
 
         # Pixel subsampling mask — evaluated once and shared with workers.
@@ -447,16 +453,7 @@ class TriangleGA:
     def _eval_batch(self, genomes: list[np.ndarray]) -> list[float]:
         """Evaluate a batch of genomes. Uses the persistent pool when available."""
         if self._pool is None or len(genomes) <= 1:
-            # In-process path: call the worker function directly with local target
-            _worker_init(
-                self.target,
-                self.img_w,
-                self.img_h,
-                self._sample_mask,
-                self._pixel_weights,
-                self.config.renderer,
-                self.config.shape,
-            )
+            # In-process path: worker globals are already set up in __init__.
             return [_eval_genome(g) for g in genomes]
         chunksize = max(1, len(genomes) // self._workers)
         return list(self._pool.map(_eval_genome, genomes, chunksize=chunksize))

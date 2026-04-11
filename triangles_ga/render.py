@@ -197,14 +197,14 @@ def _render_pil_ovals(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
 
 def render_genome(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
     """
-    Render a triangle genome to an RGB image.
+    Render a genome (triangles or ovals) to an RGB image.
 
     The backend is controlled by the module-level ``_BACKEND`` variable, which
     can be set with :func:`set_backend`.  Use ``"skia"`` for maximum speed,
     ``"pil"`` for portability, or ``"auto"`` (default) to let the module choose.
 
     Args:
-        genome:  float32 array of shape (N_triangles, 10).
+        genome:  float32 array of shape (N, 10) for triangles or (N, 8) for ovals.
                  Genes are normalized to [0, 1].
         img_w:   Canvas width in pixels.
         img_h:   Canvas height in pixels.

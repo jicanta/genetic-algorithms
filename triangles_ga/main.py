@@ -60,7 +60,7 @@ def parse_args() -> Config:
     )
     # Problem
     p.add_argument("image", help="Input image path")
-    p.add_argument("--n-triangles", type=int, default=50, help="Number of triangles (default: 50)")
+    p.add_argument("--n-triangles", type=int, default=50, help="Number of shapes per individual (default: 50)")
     p.add_argument("--img-size", type=int, default=None, help="Resize longest side to this px (default: keep original)")
     p.add_argument(
         "--shape",

@@ -42,13 +42,11 @@ def _sample_highlight_pixels(
     rng: np.random.Generator,
     n_samples: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Sample target pixels biased toward bright warm highlights."""
+    """Sample target pixels biased toward bright, saturated areas."""
     rgb = target.reshape(-1, 3) / 255.0
     max_c = rgb.max(axis=1)
-    min_c = rgb.min(axis=1)
-    saturation = max_c - min_c
-    warm = np.maximum(0.0, np.minimum(rgb[:, 0], rgb[:, 1]) - rgb[:, 2])
-    weights = (max_c ** 1.5) * saturation + 4.0 * warm * max_c
+    saturation = max_c - rgb.min(axis=1)
+    weights = (max_c ** 1.5) * saturation
 
     if not np.isfinite(weights).all() or float(weights.sum()) <= 0.0:
         flat_idx = rng.integers(0, target.shape[0] * target.shape[1], size=n_samples)

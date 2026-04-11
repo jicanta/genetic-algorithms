@@ -1,9 +1,9 @@
 """
 Genetic operators: all selection, crossover, and mutation methods required by the TP.
 
-Genomes are float32 arrays of shape (N_triangles, 10).
-"Genes" are individual float values; "loci" are whole triangles (rows).
-Crossover operates at the locus (triangle) level to preserve internal coherence.
+Genomes are float32 arrays of shape (N, genes_per_shape) — triangles use 10 genes,
+ovals use 8. "Genes" are individual float values; "loci" are whole shapes (rows).
+Crossover operates at the locus (shape) level to preserve internal coherence.
 Mutation operates at the gene (individual float) level.
 
 Selection methods

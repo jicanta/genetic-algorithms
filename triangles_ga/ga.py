@@ -8,13 +8,49 @@ Supported mutation methods  : uniform | gen | multigen | non_uniform
 Survival strategies         : exclusive | additive
 """
 
+import os
+import sys
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 import numpy as np
 
+# ── Worker-side globals ───────────────────────────────────────────────────────
+# The target image and image dimensions are stored once per worker process via
+# the pool initializer so they never have to be pickled for every map() call.
+_W_target: Optional[np.ndarray] = None
+_W_img_w:  int = 0
+_W_img_h:  int = 0
+_W_sample_mask: Optional[np.ndarray] = None  # flat boolean mask for pixel subsampling
+
+
+def _worker_init(target: np.ndarray, img_w: int, img_h: int,
+                 sample_mask: Optional[np.ndarray],
+                 renderer: str = "auto") -> None:
+    global _W_target, _W_img_w, _W_img_h, _W_sample_mask
+    _W_target = target
+    _W_img_w  = img_w
+    _W_img_h  = img_h
+    _W_sample_mask = sample_mask
+    from .render import set_backend
+    set_backend(renderer)
+
+
+def _eval_genome(genome: np.ndarray) -> float:
+    """Evaluate a genome using worker-local target (no per-call pickling)."""
+    from .render import render_genome
+    rendered = render_genome(genome, _W_img_w, _W_img_h)
+    if _W_sample_mask is not None:
+        diff = rendered.reshape(-1, 3)[_W_sample_mask] - _W_target.reshape(-1, 3)[_W_sample_mask]
+    else:
+        diff = rendered - _W_target
+    return float(np.mean(diff ** 2))
+
 from .config import Config
 from .fitness import compute_fitness
 from .genome import random_genome
+
 from .operators import (
     # selection
     tournament_det, tournament_prob, roulette, universal, boltzmann, ranking,
@@ -82,10 +118,58 @@ class TriangleGA:
         if config.survival_strategy not in ("exclusive", "additive"):
             raise ValueError(f"Unknown survival strategy: {config.survival_strategy!r}. "
                              f"Choose from: exclusive | additive")
+        if config.renderer not in ("auto", "skia", "pil"):
+            raise ValueError(f"Unknown renderer: {config.renderer!r}. "
+                             f"Choose from: auto | skia | pil")
 
         self._select_fn  = _SELECTION[config.selection_method]
         self._cross_fn   = _CROSSOVER[config.crossover_method]
         self._mutate_fn  = _MUTATION[config.mutation_method]
+
+        # Number of parallel workers for fitness evaluation.
+        # 0 (default) → use all CPU cores; 1 → disable parallelism.
+        self._workers: int = config.workers if config.workers > 0 else (os.cpu_count() or 1)
+
+        # Pixel subsampling mask — evaluated once and shared with workers.
+        n_pixels = img_h * img_w
+        if 0.0 < config.fitness_sample < 1.0:
+            rng_mask = np.random.default_rng(config.seed + 9999)
+            sample_mask: Optional[np.ndarray] = rng_mask.random(n_pixels) < config.fitness_sample
+        else:
+            sample_mask = None
+        self._sample_mask = sample_mask
+
+        # Set worker globals for the main-process (single-worker) path.
+        _worker_init(target, img_w, img_h, sample_mask, config.renderer)
+
+        # Persistent process pool — created once, reused every generation.
+        #
+        # Strategy depends on the renderer:
+        #   Skia  → always use 'spawn': Skia's internal GPU context doesn't survive
+        #            fork(), so forked workers silently fall back to slow paths.
+        #            The target is sent once via the pool initializer.
+        #
+        #   PIL   → prefer 'fork' on Linux: child processes inherit the target
+        #            array via COW with zero serialisation cost (no IPC at all).
+        #            On macOS/Windows, fall back to spawn+initializer.
+        if self._workers > 1:
+            from .render import _HAVE_SKIA
+            use_skia = (config.renderer == "skia") or (config.renderer == "auto" and _HAVE_SKIA)
+            if use_skia or sys.platform != "linux":
+                # spawn: fresh worker, Skia initialises correctly
+                self._pool: Optional[ProcessPoolExecutor] = ProcessPoolExecutor(
+                    max_workers=self._workers,
+                    initializer=_worker_init,
+                    initargs=(target, img_w, img_h, sample_mask, config.renderer),
+                )
+            else:
+                # fork on Linux with PIL: zero-cost COW target sharing
+                ctx = multiprocessing.get_context("fork")
+                self._pool = ProcessPoolExecutor(
+                    max_workers=self._workers, mp_context=ctx
+                )
+        else:
+            self._pool = None
 
         self.population: list[np.ndarray] = []
         self.fitnesses: np.ndarray = np.empty(0)
@@ -109,7 +193,7 @@ class TriangleGA:
             random_genome(cfg.n_triangles, self.rng)
             for _ in range(cfg.population)
         ]
-        self.fitnesses = np.array([self._eval(ind) for ind in self.population])
+        self.fitnesses = np.array(self._eval_batch(self.population))
         self._sync_best()
         self._record_history(generation=0)
 
@@ -179,10 +263,9 @@ class TriangleGA:
         )
 
     def _generate_offspring(self, n: int) -> tuple[list[np.ndarray], list[float]]:
-        """Produce n offspring via selection → crossover → mutation."""
+        """Produce n offspring via selection → crossover → mutation, then evaluate in parallel."""
         cfg = self.config
         offspring: list[np.ndarray] = []
-        fits: list[float] = []
 
         while len(offspring) < n:
             p1 = self._select()
@@ -196,10 +279,9 @@ class TriangleGA:
             for child in (c1, c2):
                 if len(offspring) >= n:
                     break
-                child = self._mutate(child)
-                offspring.append(child)
-                fits.append(self._eval(child))
+                offspring.append(self._mutate(child))
 
+        fits = self._eval_batch(offspring)
         return offspring, fits
 
     def _boltzmann_temperature(self) -> float:
@@ -247,7 +329,23 @@ class TriangleGA:
         return False, ""
 
     def _eval(self, genome: np.ndarray) -> float:
-        return compute_fitness(genome, self.target, self.img_w, self.img_h)
+        """Single-genome eval (in-process, no pool overhead)."""
+        return self._eval_batch([genome])[0]
+
+    def _eval_batch(self, genomes: list[np.ndarray]) -> list[float]:
+        """Evaluate a batch of genomes. Uses the persistent pool when available."""
+        if self._pool is None or len(genomes) <= 1:
+            # In-process path: call the worker function directly with local target
+            _worker_init(self.target, self.img_w, self.img_h, self._sample_mask)
+            return [_eval_genome(g) for g in genomes]
+        chunksize = max(1, len(genomes) // self._workers)
+        return list(self._pool.map(_eval_genome, genomes, chunksize=chunksize))
+
+    def shutdown(self) -> None:
+        """Shut down the worker pool. Call when the GA is done."""
+        if self._pool is not None:
+            self._pool.shutdown(wait=False)
+            self._pool = None
 
     def _sync_best(self) -> None:
         idx = int(np.argmin(self.fitnesses))

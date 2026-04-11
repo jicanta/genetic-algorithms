@@ -26,6 +26,7 @@ from triangles_ga.config import Config
 from triangles_ga.ga import TriangleGA
 from triangles_ga.io import save_result
 from triangles_ga.plots import export_history_csv, export_run_metadata, save_run_plots
+from triangles_ga.render import set_backend, _HAVE_SKIA
 
 
 def load_target(image_path: str, img_size: Optional[int]) -> tuple[np.ndarray, int, int]:
@@ -114,6 +115,19 @@ def parse_args() -> Config:
     p.add_argument("--stop-convergence", action="store_true", help="Stop if population fitness std drops below threshold")
     p.add_argument("--convergence-thr", type=float, default=5.0, help="Fitness std threshold for convergence stop (default: 5.0)")
 
+    # Performance
+    p.add_argument("--workers", type=int, default=0,
+                   help="Parallel worker processes for fitness evaluation (default: 0 = all CPU cores)")
+    p.add_argument("--fitness-sample", type=float, default=1.0,
+                   help="Fraction of pixels used for MSE fitness (0.1–1.0, default: 1.0 = all pixels)")
+    p.add_argument(
+        "--renderer",
+        default="auto",
+        choices=["auto", "skia", "pil"],
+        help="Rendering backend: 'skia' (fast, requires skia-python), 'pil' (pure Python), "
+             "'auto' (skia if available, else pil). Default: auto",
+    )
+
     # I/O
     p.add_argument("--save-every", type=int, default=50, help="Snapshot interval in gens (default: 50)")
     p.add_argument("--output", default="output/triangles_ga", help="Output directory (default: output/triangles_ga)")
@@ -148,6 +162,9 @@ def parse_args() -> Config:
         convergence_threshold=a.convergence_thr,
         save_every=a.save_every,
         output_dir=a.output,
+        workers=a.workers,
+        fitness_sample=a.fitness_sample,
+        renderer=a.renderer,
         no_plots=a.no_plots,
         graphs_only=a.graphs_only,
         seed=a.seed,
@@ -157,6 +174,17 @@ def parse_args() -> Config:
 def main() -> None:
     cfg = parse_args()
     started_at = time.perf_counter()
+
+    set_backend(cfg.renderer)
+
+    # Report which backend is actually in use
+    if cfg.renderer == "auto":
+        active_renderer = "skia" if _HAVE_SKIA else "pil"
+        renderer_note = f"auto → {active_renderer}"
+    else:
+        active_renderer = cfg.renderer
+        renderer_note = active_renderer
+    print(f"Renderer: {renderer_note}")
 
     print(f"Loading target: {cfg.image_path}")
     target, img_w, img_h = load_target(cfg.image_path, cfg.img_size)
@@ -201,6 +229,8 @@ def main() -> None:
         if stop:
             print(f"\n  Early stop at gen {gen+1}: {reason}")
             break
+
+    ga.shutdown()
 
     best_genome, best_fitness = ga.best
     print(f"\nFinal best MSE: {best_fitness:.2f}")

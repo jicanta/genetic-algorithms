@@ -67,6 +67,11 @@ class Config:
     stop_on_convergence: bool = False    # structure: stop if population diversity collapses
     convergence_threshold: float = 5.0  # std of fitnesses below this → converged
 
+    # --- Performance ---
+    workers: int = 0        # parallel processes for fitness eval; 0 = all CPU cores
+    fitness_sample: float = 1.0  # fraction of pixels used for MSE (1.0 = all pixels)
+    renderer: str = "auto"  # rendering backend: auto | skia | pil
+
     # --- I/O ---
     save_every: int = 50
     output_dir: str = "output_triangles"

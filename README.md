@@ -49,6 +49,8 @@ genetic-algorithms/
 
 ```bash
 pip install pillow numpy
+# Optional — fast Skia renderer for Triangle Art GA (~5–15x faster than PIL):
+pip install skia-python
 # Optional — GIF export for ASCII GA:
 pip install imageio
 ```
@@ -272,9 +274,17 @@ Output goes to `output/ascii_greedy/` by default. See [`docs/ascii_greedy.md`](/
 ### How it works
 
 1. **Representation**: each individual is an array of shape `(N_triangles, 10)` where each row encodes one triangle as `[x1, y1, x2, y2, x3, y3, r, g, b, a]` — all values normalized to `[0, 1]`.
-2. **Rendering**: triangles are drawn in order onto a white canvas using alpha compositing, producing an RGB image.
+2. **Rendering**: triangles are drawn in order onto a white canvas using alpha compositing, producing an RGB image. Two backends are available (see `--renderer` below).
 3. **Fitness**: MSE between the rendered image and the RGB target.
 4. **Evolution**: fully configurable operators (see below).
+
+### Rendering backends
+
+| Backend | Flag | Description |
+|---------|------|-------------|
+| Skia | `--renderer skia` | Single-surface draw, no per-triangle allocations, anti-aliased. ~5–15x faster than PIL. Requires `pip install skia-python`. |
+| PIL | `--renderer pil` | One RGBA layer per triangle, `alpha_composite` loop. Pure Python, no native deps. |
+| Auto | `--renderer auto` | Uses Skia if installed, falls back to PIL *(default)* |
 
 ### Genetic operators
 
@@ -317,8 +327,14 @@ Output goes to `output/ascii_greedy/` by default. See [`docs/ascii_greedy.md`](/
 ### Running
 
 ```bash
-# Basic run
+# Basic run (Skia renderer used automatically if installed)
 python triangles_ga/main.py images/photo.jpg
+
+# Force the original PIL renderer
+python triangles_ga/main.py images/photo.jpg --renderer pil
+
+# Force Skia (fails fast if skia-python is not installed)
+python triangles_ga/main.py images/photo.jpg --renderer skia
 
 # More triangles, larger population
 python triangles_ga/main.py images/photo.jpg --n-triangles 100 --population 120 --generations 1000
@@ -365,6 +381,7 @@ python triangles_ga/main.py images/photo.jpg --selection tournament_prob --tourn
 | `--stagnation-gens` | `50` | Stagnation window |
 | `--stop-convergence` | *(flag)* | Early stop on convergence |
 | `--convergence-thr` | `5.0` | Convergence threshold |
+| `--renderer` | `auto` | Rendering backend: `skia` \| `pil` \| `auto` |
 
 ### Output
 

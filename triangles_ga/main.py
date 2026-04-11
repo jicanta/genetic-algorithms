@@ -141,8 +141,8 @@ def parse_args() -> Config:
     p.add_argument("--convergence-thr", type=float, default=5.0, help="Fitness std threshold for convergence stop (default: 5.0)")
 
     # Performance
-    p.add_argument("--workers", type=int, default=0,
-                   help="Parallel worker processes for fitness evaluation (default: 0 = all CPU cores)")
+    p.add_argument("--workers", type=int, default=1,
+                   help="Parallel worker processes for fitness evaluation (default: 1 = single-threaded, 0 = all CPU cores)")
     p.add_argument("--fitness-sample", type=float, default=1.0,
                    help="Fraction of pixels used for MSE fitness (0.1–1.0, default: 1.0 = all pixels)")
     p.add_argument(
@@ -229,7 +229,7 @@ def main() -> None:
         f"  |  Init: {cfg.init_method}"
     )
 
-    print(f"\nInitializing population ({cfg.population} individuals, {cfg.n_triangles} triangles each)...")
+    print(f"\nInitializing population ({cfg.population} individuals, {cfg.n_triangles} {cfg.shape}s each)...")
     ga = TriangleGA(cfg, target, img_w, img_h)
     ga.initialize()
     print(f"  Initial best MSE: {ga.best[1]:.2f}")
@@ -248,31 +248,43 @@ def main() -> None:
     print(f"  Termination: {criteria}")
 
     print(f"\nEvolving {cfg.generations} generations...\n")
-    for gen in range(cfg.generations):
-        best_fit, mean_fit = ga.step()
-        print(
-            f"  Gen {gen+1:4d}/{cfg.generations}"
-            f"  best={best_fit:8.2f}"
-            f"  mean={mean_fit:8.2f}",
-            flush=True,
-        )
+    interrupted = False
+    try:
+        for gen in range(cfg.generations):
+            best_fit, mean_fit = ga.step()
+            print(
+                f"  Gen {gen+1:4d}/{cfg.generations}"
+                f"  best={best_fit:8.2f}"
+                f"  mean={mean_fit:8.2f}",
+                flush=True,
+            )
 
-        if (gen + 1) % cfg.save_every == 0 and not cfg.graphs_only:
-            best_genome, _ = ga.best
-            json_path, png_path = save_result(best_genome, img_w, img_h, snap_dir, f"gen_{gen+1:05d}")
-            print(f"    → snapshot: {png_path}")
+            if (gen + 1) % cfg.save_every == 0 and not cfg.graphs_only:
+                best_genome, _ = ga.best
+                json_path, png_path = save_result(
+                    best_genome,
+                    img_w,
+                    img_h,
+                    snap_dir,
+                    f"gen_{gen+1:05d}",
+                    shape=cfg.shape,
+                )
+                print(f"    → snapshot: {png_path}")
 
-        stop, reason = ga.should_stop()
-        if stop:
-            print(f"\n  Early stop at gen {gen+1}: {reason}")
-            break
-
-    ga.shutdown()
+            stop, reason = ga.should_stop()
+            if stop:
+                print(f"\n  Early stop at gen {gen+1}: {reason}")
+                break
+    except KeyboardInterrupt:
+        interrupted = True
+        print("\nInterrupted by user. Saving current best result...")
+    finally:
+        ga.shutdown()
 
     best_genome, best_fitness = ga.best
     print(f"\nFinal best MSE: {best_fitness:.2f}")
     if not cfg.graphs_only:
-        json_path, png_path = save_result(best_genome, img_w, img_h, out_dir, "best")
+        json_path, png_path = save_result(best_genome, img_w, img_h, out_dir, "best", shape=cfg.shape)
         print(f"Saved → {json_path}")
         print(f"Saved → {png_path}")
 
@@ -287,7 +299,9 @@ def main() -> None:
             "population": cfg.population,
             "generations_requested": cfg.generations,
             "generations_completed": len(ga.history) - 1,
+            "interrupted": interrupted,
             "n_triangles": cfg.n_triangles,
+            "shape": cfg.shape,
             "selection_method": cfg.selection_method,
             "crossover_method": cfg.crossover_method,
             "mutation_method": cfg.mutation_method,

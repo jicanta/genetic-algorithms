@@ -115,7 +115,7 @@ class Config:
     target_mse: Optional[float] = None  # stop when best MSE reaches this value (None = disabled)
 
     # --- Performance ---
-    workers: int = 0        # parallel processes for fitness eval; 0 = all CPU cores
+    workers: int = 1        # parallel processes for fitness eval; 1 = single-threaded (default), 0 = all CPU cores
     fitness_sample: float = 1.0  # fraction of pixels used for MSE (1.0 = all pixels)
     renderer: str = "auto"  # rendering backend: auto | skia | pil
 

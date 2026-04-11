@@ -276,7 +276,7 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--layer-mutation-rate` | `0.02` | Per-individual chance to mutate triangle draw order |
 | `--layer-mutation-max-shift` | `8` | Max positions for move-order mutation |
 | `--survival` | `exclusive` | Survival strategy (see table above) |
-| `--workers` | `0` | Parallel processes for fitness eval; `0` = all CPU cores |
+| `--workers` | `1` | Parallel worker processes; `1` = single-threaded (default), `0` = all CPU cores |
 | `--fitness-sample` | `1.0` | Fraction of pixels used for MSE (e.g. `0.5` for 2x speedup) |
 | `--save-every` | `50` | Snapshot interval in generations |
 | `--output` | `output/triangles_ga/` | Output directory |

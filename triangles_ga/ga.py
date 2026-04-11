@@ -49,7 +49,7 @@ def _eval_genome(genome: np.ndarray) -> float:
 
 from .config import Config
 from .fitness import compute_fitness
-from .genome import random_genome
+from .genome import random_genome, color_sampled_genome
 
 from .operators import (
     # selection
@@ -187,12 +187,26 @@ class TriangleGA:
         return self._best_genome, self._best_fitness
 
     def initialize(self) -> None:
-        """Create a fully random initial population and evaluate fitness."""
+        """Create the initial population and evaluate fitness.
+
+        With init_method='random' (default) all genes are uniformly random.
+        With init_method='color_sample' vertex positions and alpha are still
+        random, but each triangle's RGB is sampled from the target at the
+        centroid of its vertices — giving the GA a much better color starting
+        point without biasing the geometry search.
+        """
         cfg = self.config
-        self.population = [
-            random_genome(cfg.n_triangles, self.rng)
-            for _ in range(cfg.population)
-        ]
+        if cfg.init_method == "color_sample":
+            self.population = [
+                color_sampled_genome(cfg.n_triangles, self.rng,
+                                     self.target, self.img_w, self.img_h)
+                for _ in range(cfg.population)
+            ]
+        else:
+            self.population = [
+                random_genome(cfg.n_triangles, self.rng)
+                for _ in range(cfg.population)
+            ]
         self.fitnesses = np.array(self._eval_batch(self.population))
         self._sync_best()
         self._record_history(generation=0)

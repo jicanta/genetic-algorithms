@@ -62,6 +62,13 @@ def parse_args() -> Config:
     p.add_argument("image", help="Input image path")
     p.add_argument("--n-triangles", type=int, default=50, help="Number of triangles (default: 50)")
     p.add_argument("--img-size", type=int, default=None, help="Resize longest side to this px (default: keep original)")
+    p.add_argument(
+        "--init",
+        default="random",
+        choices=["random", "color_sample"],
+        help="Initial population strategy: 'random' (all genes uniform) or "
+             "'color_sample' (geometry random, colors sampled from target). Default: random",
+    )
 
     # GA core
     p.add_argument("--population", type=int, default=80, help="Population size (default: 80)")
@@ -140,6 +147,7 @@ def parse_args() -> Config:
         image_path=a.image,
         n_triangles=a.n_triangles,
         img_size=a.img_size,
+        init_method=a.init,
         population=a.population,
         generations=a.generations,
         elite=a.elite,
@@ -192,6 +200,7 @@ def main() -> None:
     print(
         f"  Selection: {cfg.selection_method}  |  Crossover: {cfg.crossover_method}"
         f"  |  Mutation: {cfg.mutation_method}  |  Survival: {cfg.survival_strategy}"
+        f"  |  Init: {cfg.init_method}"
     )
 
     print(f"\nInitializing population ({cfg.population} individuals, {cfg.n_triangles} triangles each)...")

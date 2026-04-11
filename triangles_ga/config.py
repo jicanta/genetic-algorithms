@@ -19,6 +19,8 @@ class Config:
             raise ValueError(f"crossover_prob must be in [0, 1], got {self.crossover_prob}")
         if self.n_triangles < 1:
             raise ValueError(f"n_triangles must be >= 1, got {self.n_triangles}")
+        if self.init_method not in ("random", "color_sample"):
+            raise ValueError(f"init_method must be 'random' or 'color_sample', got {self.init_method!r}")
         if self.stagnation_gens < 1:
             raise ValueError(f"stagnation_gens must be >= 1, got {self.stagnation_gens}")
         if self.convergence_threshold <= 0.0:
@@ -27,6 +29,7 @@ class Config:
     # --- Problem parameters ---
     n_triangles: int = 50
     img_size: Optional[int] = None       # resize longest side to this (None = keep original)
+    init_method: str = "random"          # initial population: random | color_sample
 
     # --- GA core ---
     population: int = 80

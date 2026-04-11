@@ -1,18 +1,28 @@
 """
-Genome representation for the triangle GA.
+Genome representation for the shape GA.
 
-Each individual is a float32 array of shape (N_triangles, 10):
+Triangle genome — float32 array of shape (N, 10):
     [x1, y1, x2, y2, x3, y3, r, g, b, a]
 
-All values are normalized to [0.0, 1.0]. Denormalization happens at render time:
-    - x_i *= img_width,  y_i *= img_height
-    - r, g, b, a *= 255  (PIL expects uint8)
+Oval genome — float32 array of shape (N, 8):
+    [cx, cy, rx, ry, r, g, b, a]
+    cx, cy: center (normalized)
+    rx, ry: horizontal and vertical radii (normalized relative to canvas size)
+
+All values are normalized to [0.0, 1.0]. Denormalization happens at render time.
 """
 
 import numpy as np
 
 
-GENES_PER_TRIANGLE = 10  # 6 coords + 4 color channels
+GENES_PER_TRIANGLE = 10   # 6 vertex coords + r, g, b, a
+GENES_PER_OVAL     = 8    # cx, cy, rx, ry + r, g, b, a
+
+
+def genes_per_shape(shape: str) -> int:
+    if shape == "oval":
+        return GENES_PER_OVAL
+    return GENES_PER_TRIANGLE
 
 
 def random_genome(n_triangles: int, rng: np.random.Generator) -> np.ndarray:
@@ -62,5 +72,43 @@ def color_sampled_genome(
 
     sampled_rgb = target[py, px] / 255.0   # (N, 3), normalized to [0, 1]
     genome[:, 6:9] = sampled_rgb.astype(np.float32)
+
+    return genome
+
+
+# ── Oval genomes ──────────────────────────────────────────────────────────────
+
+def random_oval_genome(n_ovals: int, rng: np.random.Generator) -> np.ndarray:
+    """Return a random oval genome with all genes uniformly sampled from [0, 1]."""
+    return rng.random((n_ovals, GENES_PER_OVAL)).astype(np.float32)
+
+
+def color_sampled_oval_genome(
+    n_ovals: int,
+    rng: np.random.Generator,
+    target: np.ndarray,
+    img_w: int,
+    img_h: int,
+) -> np.ndarray:
+    """
+    Return an oval genome with random geometry but colors sampled from the target.
+
+    Each oval's center (cx, cy) is used directly to look up the target color,
+    so the sampled color matches what's actually at the oval's position.
+
+    Returns:
+        float32 array of shape (n_ovals, 8).
+    """
+    genome = rng.random((n_ovals, GENES_PER_OVAL)).astype(np.float32)
+
+    # cx, cy are genes 0 and 1
+    cx = genome[:, 0]
+    cy = genome[:, 1]
+
+    px = np.clip((cx * img_w).astype(int), 0, img_w - 1)
+    py = np.clip((cy * img_h).astype(int), 0, img_h - 1)
+
+    sampled_rgb = target[py, px] / 255.0   # (N, 3), normalized to [0, 1]
+    genome[:, 4:7] = sampled_rgb.astype(np.float32)
 
     return genome

@@ -26,7 +26,7 @@ from triangles_ga.config import Config
 from triangles_ga.ga import TriangleGA
 from triangles_ga.io import save_result
 from triangles_ga.plots import export_history_csv, export_run_metadata, save_run_plots
-from triangles_ga.render import set_backend, _HAVE_SKIA
+from triangles_ga.render import set_backend, set_shape, _HAVE_SKIA
 
 
 def load_target(image_path: str, img_size: Optional[int]) -> tuple[np.ndarray, int, int]:
@@ -62,6 +62,12 @@ def parse_args() -> Config:
     p.add_argument("image", help="Input image path")
     p.add_argument("--n-triangles", type=int, default=50, help="Number of triangles (default: 50)")
     p.add_argument("--img-size", type=int, default=None, help="Resize longest side to this px (default: keep original)")
+    p.add_argument(
+        "--shape",
+        default="triangle",
+        choices=["triangle", "oval"],
+        help="Shape primitive: 'triangle' (6 vertex coords) or 'oval' (cx,cy,rx,ry). Default: triangle",
+    )
     p.add_argument(
         "--init",
         default="random",
@@ -126,6 +132,8 @@ def parse_args() -> Config:
     )
 
     # Termination
+    p.add_argument("--target-mse", type=float, default=None,
+                   help="Stop when best MSE reaches this value (default: disabled)")
     p.add_argument("--stop-stagnation", action="store_true", help="Stop if no improvement for --stagnation-gens generations")
     p.add_argument("--stagnation-gens", type=int, default=50, help="Stagnation window in generations (default: 50)")
     p.add_argument("--stagnation-delta", type=float, default=0.5, help="Minimum MSE improvement to reset stagnation counter (default: 0.5)")
@@ -157,6 +165,7 @@ def parse_args() -> Config:
         image_path=a.image,
         n_triangles=a.n_triangles,
         img_size=a.img_size,
+        shape=a.shape,
         init_method=a.init,
         population=a.population,
         generations=a.generations,
@@ -178,6 +187,7 @@ def parse_args() -> Config:
         layer_mutation_rate=a.layer_mutation_rate,
         layer_mutation_max_shift=a.layer_mutation_max_shift,
         survival_strategy=a.survival,
+        target_mse=a.target_mse,
         stop_on_stagnation=a.stop_stagnation,
         stagnation_gens=a.stagnation_gens,
         stagnation_delta=a.stagnation_delta,
@@ -199,6 +209,7 @@ def main() -> None:
     started_at = time.perf_counter()
 
     set_backend(cfg.renderer)
+    set_shape(cfg.shape)
 
     # Report which backend is actually in use
     if cfg.renderer == "auto":
@@ -227,6 +238,8 @@ def main() -> None:
     snap_dir = out_dir / "snapshots"
 
     stop_info = []
+    if cfg.target_mse is not None:
+        stop_info.append(f"target_mse<={cfg.target_mse}")
     if cfg.stop_on_stagnation:
         stop_info.append(f"stagnation>{cfg.stagnation_gens}gens")
     if cfg.stop_on_convergence:

@@ -27,14 +27,16 @@ _W_sample_mask: Optional[np.ndarray] = None  # flat boolean mask for pixel subsa
 
 def _worker_init(target: np.ndarray, img_w: int, img_h: int,
                  sample_mask: Optional[np.ndarray],
-                 renderer: str = "auto") -> None:
+                 renderer: str = "auto",
+                 shape: str = "triangle") -> None:
     global _W_target, _W_img_w, _W_img_h, _W_sample_mask
     _W_target = target
     _W_img_w  = img_w
     _W_img_h  = img_h
     _W_sample_mask = sample_mask
-    from .render import set_backend
+    from .render import set_backend, set_shape
     set_backend(renderer)
+    set_shape(shape)
 
 
 def _eval_genome(genome: np.ndarray) -> float:
@@ -49,7 +51,11 @@ def _eval_genome(genome: np.ndarray) -> float:
 
 from .config import Config
 from .fitness import compute_fitness
-from .genome import random_genome, color_sampled_genome
+from .genome import (
+    random_genome, color_sampled_genome,
+    random_oval_genome, color_sampled_oval_genome,
+    genes_per_shape,
+)
 
 from .operators import (
     # selection
@@ -124,6 +130,8 @@ class TriangleGA:
             raise ValueError(f"Unknown renderer: {config.renderer!r}. "
                              f"Choose from: auto | skia | pil")
 
+        self._genes_per_shape: int = genes_per_shape(config.shape)
+
         self._select_fn  = _SELECTION[config.selection_method]
         self._cross_fn   = _CROSSOVER[config.crossover_method]
         self._mutate_fn  = _MUTATION[config.mutation_method]
@@ -142,30 +150,19 @@ class TriangleGA:
         self._sample_mask = sample_mask
 
         # Set worker globals for the main-process (single-worker) path.
-        _worker_init(target, img_w, img_h, sample_mask, config.renderer)
+        _worker_init(target, img_w, img_h, sample_mask, config.renderer, config.shape)
 
         # Persistent process pool — created once, reused every generation.
-        #
-        # Strategy depends on the renderer:
-        #   Skia  → always use 'spawn': Skia's internal GPU context doesn't survive
-        #            fork(), so forked workers silently fall back to slow paths.
-        #            The target is sent once via the pool initializer.
-        #
-        #   PIL   → prefer 'fork' on Linux: child processes inherit the target
-        #            array via COW with zero serialisation cost (no IPC at all).
-        #            On macOS/Windows, fall back to spawn+initializer.
         if self._workers > 1:
             from .render import _HAVE_SKIA
             use_skia = (config.renderer == "skia") or (config.renderer == "auto" and _HAVE_SKIA)
             if use_skia or sys.platform != "linux":
-                # spawn: fresh worker, Skia initialises correctly
                 self._pool: Optional[ProcessPoolExecutor] = ProcessPoolExecutor(
                     max_workers=self._workers,
                     initializer=_worker_init,
-                    initargs=(target, img_w, img_h, sample_mask, config.renderer),
+                    initargs=(target, img_w, img_h, sample_mask, config.renderer, config.shape),
                 )
             else:
-                # fork on Linux with PIL: zero-cost COW target sharing
                 ctx = multiprocessing.get_context("fork")
                 self._pool = ProcessPoolExecutor(
                     max_workers=self._workers, mp_context=ctx
@@ -198,17 +195,29 @@ class TriangleGA:
         point without biasing the geometry search.
         """
         cfg = self.config
-        if cfg.init_method == "color_sample":
-            self.population = [
-                color_sampled_genome(cfg.n_triangles, self.rng,
-                                     self.target, self.img_w, self.img_h)
-                for _ in range(cfg.population)
-            ]
+        n = cfg.n_triangles
+        if cfg.shape == "oval":
+            if cfg.init_method == "color_sample":
+                self.population = [
+                    color_sampled_oval_genome(n, self.rng, self.target, self.img_w, self.img_h)
+                    for _ in range(cfg.population)
+                ]
+            else:
+                self.population = [
+                    random_oval_genome(n, self.rng)
+                    for _ in range(cfg.population)
+                ]
         else:
-            self.population = [
-                random_genome(cfg.n_triangles, self.rng)
-                for _ in range(cfg.population)
-            ]
+            if cfg.init_method == "color_sample":
+                self.population = [
+                    color_sampled_genome(n, self.rng, self.target, self.img_w, self.img_h)
+                    for _ in range(cfg.population)
+                ]
+            else:
+                self.population = [
+                    random_genome(n, self.rng)
+                    for _ in range(cfg.population)
+                ]
         self.fitnesses = np.array(self._eval_batch(self.population))
         self._sync_best()
         self._record_history(generation=0)
@@ -279,6 +288,7 @@ class TriangleGA:
             geometry_sigma_scale=cfg.geometry_mutation_scale,
             color_sigma_scale=cfg.color_mutation_scale,
             alpha_sigma_scale=cfg.alpha_mutation_scale,
+            genes_per_shape=self._genes_per_shape,
         )
 
     def _generate_offspring(self, n: int) -> tuple[list[np.ndarray], list[float]]:
@@ -356,6 +366,9 @@ class TriangleGA:
         the population has collapsed and further evolution yields diminishing returns.
         """
         cfg = self.config
+
+        if cfg.target_mse is not None and self._best_fitness <= cfg.target_mse:
+            return True, f"target MSE reached: {self._best_fitness:.4f} <= {cfg.target_mse}"
 
         if cfg.stop_on_stagnation:
             if self._stagnation_counter >= cfg.stagnation_gens:

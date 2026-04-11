@@ -156,6 +156,13 @@ python ascii_ga/main_greedy.py images/photo.jpg --edge-weight 0 --neighbor-weigh
 
 Each individual is a float32 array of shape `(N_triangles, 10)` — one row per triangle: `[x1, y1, x2, y2, x3, y3, r, g, b, a]`, all values in `[0, 1]`. Triangles are drawn in order onto a white canvas with alpha compositing to produce an RGB image. Fitness is MSE against the target.
 
+### Shape primitives (`--shape`)
+
+| Shape | Flag | Genome | Description |
+|---|---|---|---|
+| Triangle | `--shape triangle` | `[x1,y1, x2,y2, x3,y3, r,g,b,a]` — 10 genes *(default)* | Three vertices, alpha-composited |
+| Oval | `--shape oval` | `[cx,cy, rx,ry, r,g,b,a]` — 8 genes | Axis-aligned ellipse; center + radii, alpha-composited |
+
 ### Initial population strategies (`--init`)
 
 | Strategy | Flag | Description |
@@ -217,6 +224,12 @@ Triangle draw order is also mutable via `--layer-mutation-rate`, because alpha c
 # Basic run
 python triangles_ga/main.py images/photo.jpg
 
+# Ovals instead of triangles
+python triangles_ga/main.py images/photo.jpg --shape oval
+
+# Stop when MSE drops below 500
+python triangles_ga/main.py images/photo.jpg --target-mse 500
+
 # Color-sampled init + Skia renderer
 python triangles_ga/main.py images/photo.jpg --init color_sample --renderer skia
 
@@ -238,7 +251,8 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--n-triangles` | `50` | Triangles per individual |
+| `--n-triangles` | `50` | Number of shapes per individual |
+| `--shape` | `triangle` | Shape primitive: `triangle` \| `oval` |
 | `--img-size` | *(original)* | Resize longest side to N px before running |
 | `--init` | `random` | Initial population: `random` \| `color_sample` |
 | `--renderer` | `auto` | Rendering backend: `auto` \| `skia` \| `pil` |
@@ -267,6 +281,7 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--save-every` | `50` | Snapshot interval in generations |
 | `--output` | `output/triangles_ga/` | Output directory |
 | `--seed` | `42` | Random seed |
+| `--target-mse` | *(disabled)* | Stop when best MSE reaches this value |
 | `--stop-stagnation` | *(flag)* | Stop if no improvement for `--stagnation-gens` generations |
 | `--stagnation-gens` | `50` | Stagnation window |
 | `--stagnation-delta` | `0.5` | Minimum MSE improvement to reset the counter |

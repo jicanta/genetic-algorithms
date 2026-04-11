@@ -52,12 +52,20 @@ def _gene_sigma_scales(
     geometry_scale: float,
     color_scale: float,
     alpha_scale: float,
+    genes_per_shape: int = 10,
 ) -> np.ndarray:
-    """Return per-gene sigma multipliers for coords, RGB, and alpha."""
+    """Return per-gene sigma multipliers for geometry, RGB, and alpha.
+
+    Layout (last 4 genes are always color+alpha regardless of shape type):
+        genes 0 .. n-5  → geometry (coords / radii)
+        genes n-4 .. n-2 → RGB color
+        gene  n-1        → alpha
+    """
+    n = genes_per_shape
     scales = np.empty_like(genome, dtype=np.float32)
-    scales[:, :6] = geometry_scale
-    scales[:, 6:9] = color_scale
-    scales[:, 9] = alpha_scale
+    scales[:, :n - 4] = geometry_scale
+    scales[:, n - 4:n - 1] = color_scale
+    scales[:, n - 1] = alpha_scale
     return scales
 
 
@@ -66,10 +74,12 @@ def _scale_for_gene_index(
     geometry_scale: float,
     color_scale: float,
     alpha_scale: float,
+    genes_per_shape: int = 10,
 ) -> np.ndarray:
     """Map flattened gene indices to the corresponding sigma multiplier."""
-    col = gene_index % 10
-    return np.where(col < 6, geometry_scale, np.where(col < 9, color_scale, alpha_scale))
+    n = genes_per_shape
+    col = gene_index % n
+    return np.where(col < n - 4, geometry_scale, np.where(col < n - 1, color_scale, alpha_scale))
 
 
 # ─── Selection ────────────────────────────────────────────────────────────────
@@ -317,18 +327,18 @@ def mutate_uniform(
     geometry_sigma_scale: float = 1.0,
     color_sigma_scale: float = 0.5,
     alpha_sigma_scale: float = 0.5,
+    genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
     """
     Per-gene Gaussian mutation with fixed probability and typed sigma.
 
-    Each of the N*10 genes mutates independently with probability mutation_rate.
-    Coordinates, RGB, and alpha use separate sigma multipliers because small
-    color/opacity changes are usually more useful than equally large jumps.
+    Each gene mutates independently with probability mutation_rate.
+    Geometry, RGB, and alpha use separate sigma multipliers.
     """
     child = genome.copy()
     mask = rng.random(child.shape) < mutation_rate
-    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale, genes_per_shape)
     noise = rng.normal(0.0, mutation_sigma, size=child.shape).astype(np.float32) * scales
     child[mask] += noise[mask]
     np.clip(child, 0.0, 1.0, out=child)
@@ -342,6 +352,7 @@ def mutate_gen(
     geometry_sigma_scale: float = 1.0,
     color_sigma_scale: float = 0.5,
     alpha_sigma_scale: float = 0.5,
+    genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -354,7 +365,7 @@ def mutate_gen(
     row = int(rng.integers(0, child.shape[0]))
     col = int(rng.integers(0, child.shape[1]))
     scale = float(_scale_for_gene_index(
-        np.array([col]), geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale
+        np.array([col]), geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale, genes_per_shape
     )[0])
     child[row, col] += float(rng.normal(0.0, mutation_sigma * scale))
     child[row, col] = float(np.clip(child[row, col], 0.0, 1.0))
@@ -369,6 +380,7 @@ def mutate_multigen(
     geometry_sigma_scale: float = 1.0,
     color_sigma_scale: float = 0.5,
     alpha_sigma_scale: float = 0.5,
+    genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -381,7 +393,7 @@ def mutate_multigen(
     n_genes = int(rng.integers(1, max_genes + 1))
     flat = child.reshape(-1)
     indices = rng.integers(0, flat.size, size=n_genes)
-    scales = _scale_for_gene_index(indices, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    scales = _scale_for_gene_index(indices, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale, genes_per_shape)
     noise = rng.normal(0.0, mutation_sigma, size=n_genes).astype(np.float32) * scales
     flat[indices] += noise
     np.clip(flat, 0.0, 1.0, out=flat)
@@ -398,6 +410,7 @@ def mutate_non_uniform(
     geometry_sigma_scale: float = 1.0,
     color_sigma_scale: float = 0.5,
     alpha_sigma_scale: float = 0.5,
+    genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
     """
@@ -415,7 +428,7 @@ def mutate_non_uniform(
 
     child = genome.copy()
     mask = rng.random(child.shape) < mutation_rate
-    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale)
+    scales = _gene_sigma_scales(child, geometry_sigma_scale, color_sigma_scale, alpha_sigma_scale, genes_per_shape)
     noise = rng.normal(0.0, effective_sigma, size=child.shape).astype(np.float32) * scales
     child[mask] += noise[mask]
     np.clip(child, 0.0, 1.0, out=child)

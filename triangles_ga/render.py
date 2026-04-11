@@ -24,6 +24,7 @@ except ImportError:
 # Module-level backend selection.  Set via set_backend() before rendering.
 # Options: "auto" | "skia" | "pil"
 _BACKEND: str = "auto"
+_SHAPE:   str = "triangle"
 
 
 def set_backend(backend: str) -> None:
@@ -46,6 +47,19 @@ def set_backend(backend: str) -> None:
             "Install it with:  pip install skia-python"
         )
     _BACKEND = backend
+
+
+def set_shape(shape: str) -> None:
+    """
+    Set the shape type rendered by this process.
+
+    Args:
+        shape: "triangle" | "oval"
+    """
+    global _SHAPE
+    if shape not in ("triangle", "oval"):
+        raise ValueError(f"Unknown shape {shape!r}. Choose: triangle | oval")
+    _SHAPE = shape
 
 
 # ── Skia backend ──────────────────────────────────────────────────────────────
@@ -122,6 +136,63 @@ def _render_pil(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
     return np.array(canvas.convert("RGB"), dtype=np.float32)
 
 
+# ── Oval renderers ───────────────────────────────────────────────────────────
+
+def _render_skia_ovals(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
+    """Render axis-aligned ovals using Skia. genome shape: (N, 8) [cx,cy,rx,ry,r,g,b,a]."""
+    key = (img_w, img_h)
+    if key not in _skia_surfaces:
+        _skia_surfaces[key] = _skia.Surface(img_w, img_h)
+    surface = _skia_surfaces[key]
+
+    paint = _skia.Paint(AntiAlias=True, BlendMode=_skia.BlendMode.kSrcOver)
+
+    with surface as canvas:
+        canvas.clear(_skia.ColorWHITE)
+
+        for oval in genome:
+            cx, cy, rx, ry, r, g, b, a = oval
+
+            paint.setARGB(
+                int(a * 255),
+                int(r * 255),
+                int(g * 255),
+                int(b * 255),
+            )
+
+            rect = _skia.Rect.MakeLTRB(
+                (cx - rx) * img_w, (cy - ry) * img_h,
+                (cx + rx) * img_w, (cy + ry) * img_h,
+            )
+            canvas.drawOval(rect, paint)
+
+    bgra = np.array(surface.makeImageSnapshot())
+    rgb  = bgra[:, :, :3][:, :, ::-1].astype(np.float32)
+    return rgb
+
+
+def _render_pil_ovals(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
+    """Render axis-aligned ovals using PIL. genome shape: (N, 8) [cx,cy,rx,ry,r,g,b,a]."""
+    from PIL import Image, ImageDraw
+
+    canvas = Image.new("RGBA", (img_w, img_h), (255, 255, 255, 255))
+
+    for oval in genome:
+        cx, cy, rx, ry, r, g, b, a = oval
+
+        bbox = [
+            float((cx - rx) * img_w), float((cy - ry) * img_h),
+            float((cx + rx) * img_w), float((cy + ry) * img_h),
+        ]
+        color = (int(r * 255), int(g * 255), int(b * 255), int(a * 255))
+
+        layer = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
+        ImageDraw.Draw(layer).ellipse(bbox, fill=color)
+        canvas = Image.alpha_composite(canvas, layer)
+
+    return np.array(canvas.convert("RGB"), dtype=np.float32)
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def render_genome(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
@@ -141,6 +212,11 @@ def render_genome(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
     Returns:
         float32 array of shape (img_h, img_w, 3), values in [0, 255].
     """
-    if _BACKEND == "skia" or (_BACKEND == "auto" and _HAVE_SKIA):
+    use_skia = _BACKEND == "skia" or (_BACKEND == "auto" and _HAVE_SKIA)
+    if _SHAPE == "oval":
+        if use_skia:
+            return _render_skia_ovals(genome, img_w, img_h)
+        return _render_pil_ovals(genome, img_w, img_h)
+    if use_skia:
         return _render_skia(genome, img_w, img_h)
     return _render_pil(genome, img_w, img_h)

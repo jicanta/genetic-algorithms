@@ -27,6 +27,10 @@ class Config:
             )
         if self.init_method not in ("random", "color_sample"):
             raise ValueError(f"init_method must be 'random' or 'color_sample', got {self.init_method!r}")
+        if self.shape not in ("triangle", "oval"):
+            raise ValueError(f"shape must be 'triangle' or 'oval', got {self.shape!r}")
+        if self.target_mse is not None and self.target_mse < 0.0:
+            raise ValueError(f"target_mse must be >= 0 when provided, got {self.target_mse}")
         if self.tournament_k < 1:
             raise ValueError(f"tournament_k must be >= 1, got {self.tournament_k}")
         if not 0.0 < self.tournament_prob <= 1.0:
@@ -62,6 +66,7 @@ class Config:
     n_triangles: int = 50
     img_size: Optional[int] = None       # resize longest side to this (None = keep original)
     init_method: str = "random"          # initial population: random | color_sample
+    shape: str = "triangle"             # shape primitive: triangle | oval
 
     # --- GA core ---
     population: int = 80
@@ -106,6 +111,8 @@ class Config:
 
     stop_on_convergence: bool = False    # structure: stop if population diversity collapses
     convergence_threshold: float = 5.0  # std of fitnesses below this → converged
+
+    target_mse: Optional[float] = None  # stop when best MSE reaches this value (None = disabled)
 
     # --- Performance ---
     workers: int = 0        # parallel processes for fitness eval; 0 = all CPU cores

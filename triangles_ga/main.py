@@ -70,10 +70,10 @@ def parse_args() -> Config:
     )
     p.add_argument(
         "--init",
-        default="random",
-        choices=["random", "color_sample"],
-        help="Initial population strategy: 'random' (all genes uniform) or "
-             "'color_sample' (geometry random, colors sampled from target). Default: random",
+        default="mixed",
+        choices=["random", "color_sample", "mixed"],
+        help="Initial population strategy: 'random', 'color_sample', or "
+             "'mixed' (half color-sampled, half random colors). Default: mixed",
     )
 
     # GA core
@@ -114,10 +114,10 @@ def parse_args() -> Config:
     p.add_argument("--multigen-max", type=int, default=5, help="Max genes mutated per call for multigen (default: 5)")
     p.add_argument("--geometry-mutation-scale", type=float, default=1.0,
                    help="Sigma multiplier for triangle vertex genes (default: 1.0)")
-    p.add_argument("--color-mutation-scale", type=float, default=0.5,
-                   help="Sigma multiplier for RGB genes (default: 0.5)")
-    p.add_argument("--alpha-mutation-scale", type=float, default=0.5,
-                   help="Sigma multiplier for alpha genes (default: 0.5)")
+    p.add_argument("--color-mutation-scale", type=float, default=1.0,
+                   help="Sigma multiplier for RGB genes (default: 1.0)")
+    p.add_argument("--alpha-mutation-scale", type=float, default=1.0,
+                   help="Sigma multiplier for alpha genes (default: 1.0)")
     p.add_argument("--layer-mutation-rate", type=float, default=0.02,
                    help="Per-individual chance to mutate triangle draw order (default: 0.02)")
     p.add_argument("--layer-mutation-max-shift", type=int, default=8,
@@ -145,6 +145,8 @@ def parse_args() -> Config:
                    help="Parallel worker processes for fitness evaluation (default: 1 = single-threaded, 0 = all CPU cores)")
     p.add_argument("--fitness-sample", type=float, default=1.0,
                    help="Fraction of pixels used for MSE fitness (0.1–1.0, default: 1.0 = all pixels)")
+    p.add_argument("--saliency-weight", type=float, default=0.0,
+                   help="Extra fitness weight for bright/saturated target pixels (default: 0.0)")
     p.add_argument(
         "--renderer",
         default="auto",
@@ -197,6 +199,7 @@ def parse_args() -> Config:
         output_dir=a.output,
         workers=a.workers,
         fitness_sample=a.fitness_sample,
+        saliency_weight=a.saliency_weight,
         renderer=a.renderer,
         no_plots=a.no_plots,
         graphs_only=a.graphs_only,
@@ -308,6 +311,7 @@ def main() -> None:
             "survival_strategy": cfg.survival_strategy,
             "best_mse": float(best_fitness),
             "runtime_seconds": runtime_seconds,
+            "saliency_weight": cfg.saliency_weight,
             "seed": cfg.seed,
         },
         out_dir,

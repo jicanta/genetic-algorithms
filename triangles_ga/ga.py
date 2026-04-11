@@ -23,17 +23,24 @@ _W_target: Optional[np.ndarray] = None
 _W_img_w:  int = 0
 _W_img_h:  int = 0
 _W_sample_mask: Optional[np.ndarray] = None  # flat boolean mask for pixel subsampling
+_W_pixel_weights: Optional[np.ndarray] = None
 
 
 def _worker_init(target: np.ndarray, img_w: int, img_h: int,
                  sample_mask: Optional[np.ndarray],
+                 pixel_weights: Optional[np.ndarray] = None,
                  renderer: str = "auto",
-                 shape: str = "triangle") -> None:
-    global _W_target, _W_img_w, _W_img_h, _W_sample_mask
+                 shape: str = "triangle",
+                 ignore_sigint: bool = False) -> None:
+    global _W_target, _W_img_w, _W_img_h, _W_sample_mask, _W_pixel_weights
+    if ignore_sigint:
+        import signal
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     _W_target = target
     _W_img_w  = img_w
     _W_img_h  = img_h
     _W_sample_mask = sample_mask
+    _W_pixel_weights = pixel_weights
     from .render import set_backend, set_shape
     set_backend(renderer)
     set_shape(shape)
@@ -45,8 +52,12 @@ def _eval_genome(genome: np.ndarray) -> float:
     rendered = render_genome(genome, _W_img_w, _W_img_h)
     if _W_sample_mask is not None:
         diff = rendered.reshape(-1, 3)[_W_sample_mask] - _W_target.reshape(-1, 3)[_W_sample_mask]
+        if _W_pixel_weights is not None:
+            return float(np.mean((diff ** 2) * _W_pixel_weights[_W_sample_mask, None]))
     else:
         diff = rendered - _W_target
+        if _W_pixel_weights is not None:
+            return float(np.mean((diff ** 2) * _W_pixel_weights.reshape(_W_img_h, _W_img_w, 1)))
     return float(np.mean(diff ** 2))
 
 from .config import Config
@@ -90,6 +101,20 @@ _MUTATION = {
     "multigen":    mutate_multigen,
     "non_uniform": mutate_non_uniform,
 }
+
+
+def _build_saliency_weights(target: np.ndarray, saliency_weight: float) -> Optional[np.ndarray]:
+    """Weight perceptually important pixels more heavily in the fitness function.\n\n    Saliency = brightness^1.5 * saturation. Bright, saturated pixels are\n    perceptually dominant in any image — errors there are more visible than\n    errors in dark or grey areas. Disabled (plain MSE) when saliency_weight=0.\n    """
+    if saliency_weight <= 0.0:
+        return None
+
+    rgb = target.reshape(-1, 3) / 255.0
+    max_c = rgb.max(axis=1)
+    min_c = rgb.min(axis=1)
+    saturation = max_c - min_c
+    saliency = (max_c ** 1.5) * saturation
+    weights = 1.0 + saliency_weight * saliency
+    return weights.astype(np.float32)
 
 
 class TriangleGA:
@@ -148,9 +173,10 @@ class TriangleGA:
         else:
             sample_mask = None
         self._sample_mask = sample_mask
+        self._pixel_weights = _build_saliency_weights(target, config.saliency_weight)
 
         # Set worker globals for the main-process (single-worker) path.
-        _worker_init(target, img_w, img_h, sample_mask, config.renderer, config.shape)
+        _worker_init(target, img_w, img_h, sample_mask, self._pixel_weights, config.renderer, config.shape)
 
         # Persistent process pool — created once, reused every generation.
         if self._workers > 1:
@@ -160,12 +186,33 @@ class TriangleGA:
                 self._pool: Optional[ProcessPoolExecutor] = ProcessPoolExecutor(
                     max_workers=self._workers,
                     initializer=_worker_init,
-                    initargs=(target, img_w, img_h, sample_mask, config.renderer, config.shape),
+                    initargs=(
+                        target,
+                        img_w,
+                        img_h,
+                        sample_mask,
+                        self._pixel_weights,
+                        config.renderer,
+                        config.shape,
+                        True,
+                    ),
                 )
             else:
                 ctx = multiprocessing.get_context("fork")
                 self._pool = ProcessPoolExecutor(
-                    max_workers=self._workers, mp_context=ctx
+                    max_workers=self._workers,
+                    mp_context=ctx,
+                    initializer=_worker_init,
+                    initargs=(
+                        target,
+                        img_w,
+                        img_h,
+                        sample_mask,
+                        self._pixel_weights,
+                        config.renderer,
+                        config.shape,
+                        True,
+                    ),
                 )
         else:
             self._pool = None
@@ -197,27 +244,33 @@ class TriangleGA:
         cfg = self.config
         n = cfg.n_triangles
         if cfg.shape == "oval":
-            if cfg.init_method == "color_sample":
+            n_sampled = cfg.population if cfg.init_method == "color_sample" else cfg.population // 2
+            if cfg.init_method in ("color_sample", "mixed"):
                 self.population = [
                     color_sampled_oval_genome(n, self.rng, self.target, self.img_w, self.img_h)
-                    for _ in range(cfg.population)
+                    for _ in range(n_sampled)
                 ]
+                if cfg.init_method == "mixed":
+                    self.population.extend(
+                        random_oval_genome(n, self.rng)
+                        for _ in range(cfg.population - n_sampled)
+                    )
             else:
-                self.population = [
-                    random_oval_genome(n, self.rng)
-                    for _ in range(cfg.population)
-                ]
+                self.population = [random_oval_genome(n, self.rng) for _ in range(cfg.population)]
         else:
-            if cfg.init_method == "color_sample":
+            n_sampled = cfg.population if cfg.init_method == "color_sample" else cfg.population // 2
+            if cfg.init_method in ("color_sample", "mixed"):
                 self.population = [
                     color_sampled_genome(n, self.rng, self.target, self.img_w, self.img_h)
-                    for _ in range(cfg.population)
+                    for _ in range(n_sampled)
                 ]
+                if cfg.init_method == "mixed":
+                    self.population.extend(
+                        random_genome(n, self.rng)
+                        for _ in range(cfg.population - n_sampled)
+                    )
             else:
-                self.population = [
-                    random_genome(n, self.rng)
-                    for _ in range(cfg.population)
-                ]
+                self.population = [random_genome(n, self.rng) for _ in range(cfg.population)]
         self.fitnesses = np.array(self._eval_batch(self.population))
         self._sync_best()
         self._record_history(generation=0)
@@ -395,7 +448,15 @@ class TriangleGA:
         """Evaluate a batch of genomes. Uses the persistent pool when available."""
         if self._pool is None or len(genomes) <= 1:
             # In-process path: call the worker function directly with local target
-            _worker_init(self.target, self.img_w, self.img_h, self._sample_mask, self.config.renderer)
+            _worker_init(
+                self.target,
+                self.img_w,
+                self.img_h,
+                self._sample_mask,
+                self._pixel_weights,
+                self.config.renderer,
+                self.config.shape,
+            )
             return [_eval_genome(g) for g in genomes]
         chunksize = max(1, len(genomes) // self._workers)
         return list(self._pool.map(_eval_genome, genomes, chunksize=chunksize))

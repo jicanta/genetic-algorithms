@@ -25,8 +25,10 @@ class Config:
             raise ValueError(
                 f"crossover_method={self.crossover_method!r} requires at least 2 triangles"
             )
-        if self.init_method not in ("random", "color_sample"):
-            raise ValueError(f"init_method must be 'random' or 'color_sample', got {self.init_method!r}")
+        if self.init_method not in ("random", "color_sample", "mixed"):
+            raise ValueError(
+                f"init_method must be 'random', 'color_sample', or 'mixed', got {self.init_method!r}"
+            )
         if self.shape not in ("triangle", "oval"):
             raise ValueError(f"shape must be 'triangle' or 'oval', got {self.shape!r}")
         if self.target_mse is not None and self.target_mse < 0.0:
@@ -59,13 +61,15 @@ class Config:
             raise ValueError(f"workers must be >= 0, got {self.workers}")
         if not 0.0 < self.fitness_sample <= 1.0:
             raise ValueError(f"fitness_sample must be in (0, 1], got {self.fitness_sample}")
+        if self.saliency_weight < 0.0:
+            raise ValueError(f"saliency_weight must be >= 0, got {self.saliency_weight}")
         if self.save_every < 1:
             raise ValueError(f"save_every must be >= 1, got {self.save_every}")
 
     # --- Problem parameters ---
     n_triangles: int = 50
     img_size: Optional[int] = None       # resize longest side to this (None = keep original)
-    init_method: str = "random"          # initial population: random | color_sample
+    init_method: str = "mixed"           # initial population: random | color_sample | mixed
     shape: str = "triangle"             # shape primitive: triangle | oval
 
     # --- GA core ---
@@ -93,8 +97,8 @@ class Config:
     mutation_sigma: float = 0.05         # noise std (uniform / non_uniform / multigen)
     multigen_max_genes: int = 5          # max genes mutated per individual (multigen)
     geometry_mutation_scale: float = 1.0 # sigma multiplier for vertex coordinates
-    color_mutation_scale: float = 0.5    # sigma multiplier for RGB genes
-    alpha_mutation_scale: float = 0.5    # sigma multiplier for opacity genes
+    color_mutation_scale: float = 1.0    # sigma multiplier for RGB genes
+    alpha_mutation_scale: float = 1.0    # sigma multiplier for opacity genes
     layer_mutation_rate: float = 0.02    # per-individual chance to mutate draw order
     layer_mutation_max_shift: int = 8    # max positions for move-order mutation
 
@@ -117,6 +121,7 @@ class Config:
     # --- Performance ---
     workers: int = 1        # parallel processes for fitness eval; 1 = single-threaded (default), 0 = all CPU cores
     fitness_sample: float = 1.0  # fraction of pixels used for MSE (1.0 = all pixels)
+    saliency_weight: float = 0.0 # extra weight for bright/saturated target pixels
     renderer: str = "auto"  # rendering backend: auto | skia | pil
 
     # --- I/O ---

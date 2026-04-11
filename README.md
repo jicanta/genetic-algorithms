@@ -154,7 +154,7 @@ python ascii_ga/main_greedy.py images/photo.jpg --edge-weight 0 --neighbor-weigh
 
 ### How it works
 
-Each individual is a float32 array of shape `(N_triangles, 10)` — one row per triangle: `[x1, y1, x2, y2, x3, y3, r, g, b, a]`, all values in `[0, 1]`. Triangles are drawn in order onto a white canvas with alpha compositing to produce an RGB image. Fitness is MSE against the target.
+Each individual is a float32 array of shape `(N_triangles, 10)` — one row per triangle: `[x1, y1, x2, y2, x3, y3, r, g, b, a]`, all values in `[0, 1]`. Triangles are drawn in order onto a white canvas with alpha compositing to produce an RGB image. Fitness is MSE against the target by default, with an optional saliency-weighted mode that emphasizes bright, saturated pixels (perceptually dominant in most images).
 
 ### Shape primitives (`--shape`)
 
@@ -167,8 +167,9 @@ Each individual is a float32 array of shape `(N_triangles, 10)` — one row per 
 
 | Strategy | Flag | Description |
 |---|---|---|
-| Random | `--init random` | All genes (positions, colors, alpha) sampled uniformly from `[0, 1]`. *(default)* |
-| Color sample | `--init color_sample` | Vertex positions and alpha are random; each triangle's RGB is sampled from the target image at the centroid of its vertices. Gives a much lower initial MSE — the GA starts with plausible colors and focuses evolution on shape and placement. |
+| Mixed | `--init mixed` | Half target-sampled colors, half fully random colors. Keeps plausible target colors while preserving vivid exploration for small highlights. *(default)* |
+| Color sample | `--init color_sample` | Vertex positions and alpha are random; each shape's RGB is sampled from the target at its centroid/center. Gives a much lower initial MSE — the GA starts with plausible colors and focuses evolution on shape and placement. |
+| Random | `--init random` | All genes (positions, colors, alpha) sampled uniformly from `[0, 1]`. Useful as a baseline. |
 
 ### Rendering backends (`--renderer`)
 
@@ -230,8 +231,8 @@ python triangles_ga/main.py images/photo.jpg --shape oval
 # Stop when MSE drops below 500
 python triangles_ga/main.py images/photo.jpg --target-mse 500
 
-# Color-sampled init + Skia renderer
-python triangles_ga/main.py images/photo.jpg --init color_sample --renderer skia
+# Random-color baseline + Skia renderer
+python triangles_ga/main.py images/photo.jpg --init random --renderer skia
 
 # More triangles, larger population, smaller image for speed
 python triangles_ga/main.py images/photo.jpg --n-triangles 100 --population 120 --img-size 128
@@ -254,7 +255,7 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--n-triangles` | `50` | Number of shapes per individual |
 | `--shape` | `triangle` | Shape primitive: `triangle` \| `oval` |
 | `--img-size` | *(original)* | Resize longest side to N px before running |
-| `--init` | `random` | Initial population: `random` \| `color_sample` |
+| `--init` | `mixed` | Initial population: `random` \| `color_sample` \| `mixed` |
 | `--renderer` | `auto` | Rendering backend: `auto` \| `skia` \| `pil` |
 | `--population` | `80` | Population size |
 | `--generations` | `500` | Max generations |
@@ -271,13 +272,14 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--mutation-sigma` | `0.05` | Mutation noise std |
 | `--multigen-max` | `5` | Max genes for multigen mutation |
 | `--geometry-mutation-scale` | `1.0` | Sigma multiplier for triangle vertex genes |
-| `--color-mutation-scale` | `0.5` | Sigma multiplier for RGB genes |
-| `--alpha-mutation-scale` | `0.5` | Sigma multiplier for opacity genes |
+| `--color-mutation-scale` | `1.0` | Sigma multiplier for RGB genes |
+| `--alpha-mutation-scale` | `1.0` | Sigma multiplier for opacity genes |
 | `--layer-mutation-rate` | `0.02` | Per-individual chance to mutate triangle draw order |
 | `--layer-mutation-max-shift` | `8` | Max positions for move-order mutation |
 | `--survival` | `exclusive` | Survival strategy (see table above) |
 | `--workers` | `1` | Parallel worker processes; `1` = single-threaded (default), `0` = all CPU cores |
 | `--fitness-sample` | `1.0` | Fraction of pixels used for MSE (e.g. `0.5` for 2x speedup) |
+| `--saliency-weight` | `0.0` | Extra fitness weight for bright/saturated target pixels; useful for images like Starry Night |
 | `--save-every` | `50` | Snapshot interval in generations |
 | `--output` | `output/triangles_ga/` | Output directory |
 | `--seed` | `42` | Random seed |
@@ -326,4 +328,4 @@ Evaluate fitness (MSE vs target)
 Save best individual
 ```
 
-Both implementations minimize MSE between the rendered genome and the target image. Lower MSE = visually closer result.
+Both implementations minimize MSE by default. The shape implementation can use saliency-weighted MSE via `--saliency-weight` when small bright details matter. Lower fitness = visually closer result.

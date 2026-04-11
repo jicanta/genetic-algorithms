@@ -325,8 +325,8 @@ def mutate_uniform(
     mutation_rate: float = 0.02,
     mutation_sigma: float = 0.05,
     geometry_sigma_scale: float = 1.0,
-    color_sigma_scale: float = 0.5,
-    alpha_sigma_scale: float = 0.5,
+    color_sigma_scale: float = 1.0,
+    alpha_sigma_scale: float = 1.0,
     genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
@@ -350,8 +350,8 @@ def mutate_gen(
     rng: np.random.Generator,
     mutation_sigma: float = 0.05,
     geometry_sigma_scale: float = 1.0,
-    color_sigma_scale: float = 0.5,
-    alpha_sigma_scale: float = 0.5,
+    color_sigma_scale: float = 1.0,
+    alpha_sigma_scale: float = 1.0,
     genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
@@ -378,8 +378,8 @@ def mutate_multigen(
     max_genes: int = 5,
     mutation_sigma: float = 0.05,
     geometry_sigma_scale: float = 1.0,
-    color_sigma_scale: float = 0.5,
-    alpha_sigma_scale: float = 0.5,
+    color_sigma_scale: float = 1.0,
+    alpha_sigma_scale: float = 1.0,
     genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:
@@ -408,8 +408,8 @@ def mutate_non_uniform(
     generation: int = 0,
     max_generations: int = 500,
     geometry_sigma_scale: float = 1.0,
-    color_sigma_scale: float = 0.5,
-    alpha_sigma_scale: float = 0.5,
+    color_sigma_scale: float = 1.0,
+    alpha_sigma_scale: float = 1.0,
     genes_per_shape: int = 10,
     **_kwargs,
 ) -> np.ndarray:

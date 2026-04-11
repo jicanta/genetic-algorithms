@@ -61,7 +61,6 @@ def _eval_genome(genome: np.ndarray) -> float:
     return float(np.mean(diff ** 2))
 
 from .config import Config
-from .fitness import compute_fitness
 from .genome import (
     random_genome, color_sampled_genome,
     random_oval_genome, color_sampled_oval_genome,
@@ -289,12 +288,6 @@ class TriangleGA:
             (best_fitness, mean_fitness) after this generation.
         """
         cfg = self.config
-        gen = self._generation
-
-        # --- Always preserve elite individuals ---
-        elite_idx = np.argsort(self.fitnesses)[: cfg.elite]
-        elite = [self.population[i].copy() for i in elite_idx]
-        elite_fits = list(self.fitnesses[elite_idx])
 
         # --- Generate offspring ---
         offspring, off_fits = self._generate_offspring(cfg.population - cfg.elite)
@@ -302,11 +295,16 @@ class TriangleGA:
         # --- Survival strategy ---
         if cfg.survival_strategy == "exclusive":
             # Full replacement: new generation = elite + offspring only
+            elite_idx = np.argsort(self.fitnesses)[: cfg.elite]
+            elite = [self.population[i].copy() for i in elite_idx]
+            elite_fits = list(self.fitnesses[elite_idx])
             self.population = elite + offspring
             self.fitnesses = np.array(elite_fits + off_fits)
 
         else:  # additive
-            # Pool parents and offspring, keep best N
+            # Pool parents and offspring, keep best N.
+            # Elites survive implicitly — they have the lowest fitness and will
+            # always be among the top cfg.population survivors.
             combined = self.population + offspring
             combined_fits = np.concatenate([self.fitnesses, np.array(off_fits)])
             survivors = np.argsort(combined_fits)[: cfg.population]
@@ -445,10 +443,6 @@ class TriangleGA:
                 )
 
         return False, ""
-
-    def _eval(self, genome: np.ndarray) -> float:
-        """Single-genome eval (in-process, no pool overhead)."""
-        return self._eval_batch([genome])[0]
 
     def _eval_batch(self, genomes: list[np.ndarray]) -> list[float]:
         """Evaluate a batch of genomes. Uses the persistent pool when available."""

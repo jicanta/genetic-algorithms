@@ -420,10 +420,14 @@ class TriangleGA:
         cfg = self.config
         diversity = float(self.fitnesses.std())
         gens_since_last = self._generation - self._last_restart_gen
+        gens_remaining = cfg.generations - self._generation
 
         if diversity >= cfg.diversity_restart_threshold:
             return False
         if gens_since_last < cfg.diversity_restart_cooldown:
+            return False
+        # Don't restart if there aren't enough generations left to benefit from it.
+        if gens_remaining < cfg.diversity_restart_cooldown:
             return False
 
         n_inject = max(1, int(cfg.population * cfg.diversity_restart_fraction))

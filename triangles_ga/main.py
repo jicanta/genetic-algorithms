@@ -60,7 +60,7 @@ def parse_args() -> Config:
     )
     # Problem
     p.add_argument("image", help="Input image path")
-    p.add_argument("--n-triangles", type=int, default=50, help="Number of shapes per individual (default: 50)")
+    p.add_argument("--n-triangles", type=int, default=100, help="Number of shapes per individual (default: 100)")
     p.add_argument("--img-size", type=int, default=None, help="Resize longest side to this px (default: keep original)")
     p.add_argument(
         "--shape",
@@ -77,16 +77,16 @@ def parse_args() -> Config:
     )
 
     # GA core
-    p.add_argument("--population", type=int, default=80, help="Population size (default: 80)")
-    p.add_argument("--generations", type=int, default=500, help="Generations (default: 500)")
+    p.add_argument("--population", type=int, default=150, help="Population size (default: 150)")
+    p.add_argument("--generations", type=int, default=2000, help="Generations (default: 2000)")
     p.add_argument("--elite", type=int, default=5, help="Elite count preserved per gen (default: 5)")
 
     # Selection
     p.add_argument(
         "--selection",
-        default="tournament_det",
+        default="boltzmann",
         choices=["tournament_det", "tournament_prob", "roulette", "universal", "boltzmann", "ranking"],
-        help="Selection method (default: tournament_det)",
+        help="Selection method (default: boltzmann)",
     )
     p.add_argument("--tournament-k", type=int, default=5, help="Tournament size (default: 5)")
     p.add_argument("--tournament-prob", type=float, default=0.75, help="Win probability for probabilistic tournament (default: 0.75)")
@@ -105,14 +105,14 @@ def parse_args() -> Config:
     # Mutation
     p.add_argument(
         "--mutation",
-        default="uniform",
+        default="non_uniform",
         choices=["uniform", "gen", "multigen", "non_uniform"],
-        help="Mutation method (default: uniform)",
+        help="Mutation method (default: non_uniform)",
     )
     p.add_argument("--mutation-rate", type=float, default=0.02, help="Per-gene mutation probability (default: 0.02)")
     p.add_argument("--mutation-sigma", type=float, default=0.05, help="Mutation noise std (default: 0.05)")
-    p.add_argument("--mutation-sigma-min", type=float, default=0.0,
-                   help="Minimum effective sigma for non_uniform mutation (default: 0.0 = disabled)")
+    p.add_argument("--mutation-sigma-min", type=float, default=0.005,
+                   help="Minimum effective sigma for non_uniform mutation (default: 0.005)")
     p.add_argument("--multigen-max", type=int, default=5, help="Max genes mutated per call for multigen (default: 5)")
     p.add_argument("--geometry-mutation-scale", type=float, default=1.0,
                    help="Sigma multiplier for triangle vertex genes (default: 1.0)")
@@ -134,8 +134,8 @@ def parse_args() -> Config:
     )
 
     # Diversity restart
-    p.add_argument("--diversity-restart", action="store_true",
-                   help="Inject random individuals when population diversity collapses (fitness std < threshold)")
+    p.add_argument("--diversity-restart", action=argparse.BooleanOptionalAction, default=True,
+                   help="Inject random individuals when population diversity collapses (default: enabled)")
     p.add_argument("--diversity-threshold", type=float, default=2.0,
                    help="Fitness std below this triggers a diversity injection (default: 2.0)")
     p.add_argument("--diversity-fraction", type=float, default=0.3,
@@ -153,12 +153,12 @@ def parse_args() -> Config:
     p.add_argument("--convergence-thr", type=float, default=5.0, help="Fitness std threshold for convergence stop (default: 5.0)")
 
     # Performance
-    p.add_argument("--workers", type=int, default=1,
-                   help="Parallel worker processes for fitness evaluation (default: 1 = single-threaded, 0 = all CPU cores)")
+    p.add_argument("--workers", type=int, default=0,
+                   help="Parallel worker processes for fitness evaluation (default: 0 = all CPU cores, 1 = single-threaded)")
     p.add_argument("--fitness-sample", type=float, default=1.0,
                    help="Fraction of pixels used for MSE fitness (0.1–1.0, default: 1.0 = all pixels)")
-    p.add_argument("--saliency-weight", type=float, default=0.0,
-                   help="Extra fitness weight for bright/saturated target pixels (default: 0.0)")
+    p.add_argument("--saliency-weight", type=float, default=0.3,
+                   help="Extra fitness weight for bright/saturated target pixels (default: 0.3)")
     p.add_argument(
         "--renderer",
         default="auto",

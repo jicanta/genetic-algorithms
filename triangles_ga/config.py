@@ -75,18 +75,18 @@ class Config:
             raise ValueError(f"diversity_restart_cooldown must be >= 1, got {self.diversity_restart_cooldown}")
 
     # --- Problem parameters ---
-    n_triangles: int = 50
+    n_triangles: int = 100
     img_size: Optional[int] = None       # resize longest side to this (None = keep original)
     init_method: str = "mixed"           # initial population: random | color_sample | mixed
     shape: str = "triangle"             # shape primitive: triangle | oval
 
     # --- GA core ---
-    population: int = 80
-    generations: int = 500
+    population: int = 150
+    generations: int = 2000
     elite: int = 5                       # always preserved regardless of strategy
 
     # --- Selection ---
-    selection_method: str = "tournament_det"
+    selection_method: str = "boltzmann"
     # Options: tournament_det | tournament_prob | roulette | universal | boltzmann | ranking
     tournament_k: int = 5                # tournament size (both tournament variants)
     tournament_prob: float = 0.75        # win probability for probabilistic tournament
@@ -99,11 +99,11 @@ class Config:
     crossover_prob: float = 0.8
 
     # --- Mutation ---
-    mutation_method: str = "uniform"
+    mutation_method: str = "non_uniform"
     # Options: uniform | gen | multigen | non_uniform
     mutation_rate: float = 0.02          # probability per gene (uniform / non_uniform / multigen)
     mutation_sigma: float = 0.05         # noise std (uniform / non_uniform / multigen)
-    mutation_sigma_min: float = 0.0      # floor for non_uniform decayed sigma (0 = disabled)
+    mutation_sigma_min: float = 0.005    # floor for non_uniform decayed sigma (0 = disabled)
     multigen_max_genes: int = 5          # max genes mutated per individual (multigen)
     geometry_mutation_scale: float = 1.0 # sigma multiplier for vertex coordinates
     color_mutation_scale: float = 1.0    # sigma multiplier for RGB genes
@@ -116,7 +116,7 @@ class Config:
     # Options: exclusive | additive
 
     # --- Diversity restart ---
-    diversity_restart: bool = False       # inject random individuals when population converges
+    diversity_restart: bool = True        # inject random individuals when population converges
     diversity_restart_threshold: float = 2.0  # fitness std below this triggers injection
     diversity_restart_fraction: float = 0.3   # fraction of population replaced (worst individuals)
     diversity_restart_cooldown: int = 20      # min generations between injections
@@ -134,9 +134,9 @@ class Config:
     target_mse: Optional[float] = None  # stop when best MSE reaches this value (None = disabled)
 
     # --- Performance ---
-    workers: int = 1        # parallel processes for fitness eval; 1 = single-threaded (default), 0 = all CPU cores
+    workers: int = 0        # parallel processes for fitness eval; 1 = single-threaded, 0 = all CPU cores
     fitness_sample: float = 1.0  # fraction of pixels used for MSE (1.0 = all pixels)
-    saliency_weight: float = 0.0 # extra weight for bright/saturated target pixels
+    saliency_weight: float = 0.3 # extra weight for bright/saturated target pixels
     renderer: str = "auto"  # rendering backend: auto | skia | pil
 
     # --- I/O ---

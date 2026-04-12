@@ -17,6 +17,8 @@ class Config:
             raise ValueError(f"mutation_rate must be in [0, 1], got {self.mutation_rate}")
         if self.mutation_sigma < 0.0:
             raise ValueError(f"mutation_sigma must be >= 0, got {self.mutation_sigma}")
+        if self.mutation_sigma_min < 0.0:
+            raise ValueError(f"mutation_sigma_min must be >= 0, got {self.mutation_sigma_min}")
         if not 0.0 <= self.crossover_prob <= 1.0:
             raise ValueError(f"crossover_prob must be in [0, 1], got {self.crossover_prob}")
         if self.n_triangles < 1:
@@ -65,6 +67,12 @@ class Config:
             raise ValueError(f"saliency_weight must be >= 0, got {self.saliency_weight}")
         if self.save_every < 1:
             raise ValueError(f"save_every must be >= 1, got {self.save_every}")
+        if not 0.0 < self.diversity_restart_fraction <= 1.0:
+            raise ValueError(f"diversity_restart_fraction must be in (0, 1], got {self.diversity_restart_fraction}")
+        if self.diversity_restart_threshold <= 0.0:
+            raise ValueError(f"diversity_restart_threshold must be > 0, got {self.diversity_restart_threshold}")
+        if self.diversity_restart_cooldown < 1:
+            raise ValueError(f"diversity_restart_cooldown must be >= 1, got {self.diversity_restart_cooldown}")
 
     # --- Problem parameters ---
     n_triangles: int = 50
@@ -95,6 +103,7 @@ class Config:
     # Options: uniform | gen | multigen | non_uniform
     mutation_rate: float = 0.02          # probability per gene (uniform / non_uniform / multigen)
     mutation_sigma: float = 0.05         # noise std (uniform / non_uniform / multigen)
+    mutation_sigma_min: float = 0.0      # floor for non_uniform decayed sigma (0 = disabled)
     multigen_max_genes: int = 5          # max genes mutated per individual (multigen)
     geometry_mutation_scale: float = 1.0 # sigma multiplier for vertex coordinates
     color_mutation_scale: float = 1.0    # sigma multiplier for RGB genes
@@ -105,6 +114,12 @@ class Config:
     # --- Survival strategy ---
     survival_strategy: str = "exclusive"
     # Options: exclusive | additive
+
+    # --- Diversity restart ---
+    diversity_restart: bool = False       # inject random individuals when population converges
+    diversity_restart_threshold: float = 2.0  # fitness std below this triggers injection
+    diversity_restart_fraction: float = 0.3   # fraction of population replaced (worst individuals)
+    diversity_restart_cooldown: int = 20      # min generations between injections
 
     # --- Termination criteria ---
     # Max generations is always active (the `generations` field above).

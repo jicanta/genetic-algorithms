@@ -208,7 +208,7 @@ Each individual is a float32 array of shape `(N_triangles, 10)` — one row per 
 | `uniform` | Per-gene Gaussian noise with typed geometry/color/alpha sigma *(default)* |
 | `gen` | Exactly one gene mutated per call, using its gene-type sigma |
 | `multigen` | 1 to `--multigen-max` randomly selected genes mutated |
-| `non_uniform` | Typed Gaussian noise with sigma decaying over generations |
+| `non_uniform` | Typed Gaussian noise with sigma decaying over generations, optionally kept above `--mutation-sigma-min` |
 
 Triangle draw order is also mutable via `--layer-mutation-rate`, because alpha compositing makes earlier/later triangles produce different images even with the same shapes and colors.
 
@@ -270,6 +270,7 @@ python triangles_ga/main.py images/photo.jpg --stop-stagnation --stagnation-gens
 | `--mutation` | `uniform` | Mutation method (see table above) |
 | `--mutation-rate` | `0.02` | Per-gene mutation probability |
 | `--mutation-sigma` | `0.05` | Mutation noise std |
+| `--mutation-sigma-min` | `0.0` | Minimum effective sigma for `non_uniform` mutation; `0.0` keeps the old decay-to-zero behavior |
 | `--multigen-max` | `5` | Max genes for multigen mutation |
 | `--geometry-mutation-scale` | `1.0` | Sigma multiplier for triangle vertex genes |
 | `--color-mutation-scale` | `1.0` | Sigma multiplier for RGB genes |

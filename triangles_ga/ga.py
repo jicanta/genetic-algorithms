@@ -232,6 +232,9 @@ class TriangleGA:
         self._stagnation_counter: int = 0
         self._last_improved_fitness: float = float("inf")
 
+        # Diversity restart tracking
+        self._last_restart_gen: int = -(config.diversity_restart_cooldown + 1)
+
     @property
     def best(self) -> tuple[np.ndarray, float]:
         """Current best genome and its MSE fitness."""
@@ -280,12 +283,12 @@ class TriangleGA:
         self._sync_best()
         self._record_history(generation=0)
 
-    def step(self) -> tuple[float, float]:
+    def step(self) -> tuple[float, float, bool]:
         """
         Run one generation.
 
         Returns:
-            (best_fitness, mean_fitness) after this generation.
+            (best_fitness, mean_fitness, restarted) after this generation.
         """
         cfg = self.config
 
@@ -311,10 +314,15 @@ class TriangleGA:
             self.population = [combined[i] for i in survivors]
             self.fitnesses = combined_fits[survivors]
 
+        # --- Diversity restart ---
+        restarted = False
+        if cfg.diversity_restart:
+            restarted = self._maybe_diversity_restart()
+
         self._sync_best()
         self._generation += 1
         self._record_history(generation=self._generation)
-        return self._best_fitness, float(self.fitnesses.mean())
+        return self._best_fitness, float(self.fitnesses.mean()), restarted
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -339,6 +347,7 @@ class TriangleGA:
             rng=self.rng,
             mutation_rate=cfg.mutation_rate,
             mutation_sigma=cfg.mutation_sigma,
+            mutation_sigma_min=cfg.mutation_sigma_min,
             max_genes=cfg.multigen_max_genes,
             generation=self._generation,
             max_generations=cfg.generations,
@@ -396,6 +405,62 @@ class TriangleGA:
 
         fits = self._eval_batch(offspring)
         return offspring, fits
+
+    def _maybe_diversity_restart(self) -> bool:
+        """
+        Inject fresh random individuals when population diversity collapses.
+
+        Triggered when fitness std < diversity_restart_threshold AND at least
+        diversity_restart_cooldown generations have passed since the last injection.
+        Replaces the worst `diversity_restart_fraction` of the population with new
+        random individuals (using the same init_method as the initial population).
+
+        Returns True if an injection was performed.
+        """
+        cfg = self.config
+        diversity = float(self.fitnesses.std())
+        gens_since_last = self._generation - self._last_restart_gen
+
+        if diversity >= cfg.diversity_restart_threshold:
+            return False
+        if gens_since_last < cfg.diversity_restart_cooldown:
+            return False
+
+        n_inject = max(1, int(cfg.population * cfg.diversity_restart_fraction))
+        # Keep elites; replace worst n_inject individuals
+        worst_idx = np.argsort(self.fitnesses)[-n_inject:]
+
+        new_genomes = self._fresh_genomes(n_inject)
+        new_fits = self._eval_batch(new_genomes)
+
+        for rank, pop_idx in enumerate(worst_idx):
+            self.population[pop_idx] = new_genomes[rank]
+            self.fitnesses[pop_idx] = new_fits[rank]
+
+        self._last_restart_gen = self._generation
+        return True
+
+    def _fresh_genomes(self, n: int) -> list[np.ndarray]:
+        """Generate n new genomes using the same init_method as the initial population."""
+        cfg = self.config
+        if cfg.shape == "oval":
+            if cfg.init_method == "random":
+                return [random_oval_genome(cfg.n_triangles, self.rng) for _ in range(n)]
+            return [
+                color_sampled_oval_genome(cfg.n_triangles, self.rng, self.target, self.img_w, self.img_h)
+                if (cfg.init_method == "color_sample" or self.rng.random() < 0.5)
+                else random_oval_genome(cfg.n_triangles, self.rng)
+                for _ in range(n)
+            ]
+        else:
+            if cfg.init_method == "random":
+                return [random_genome(cfg.n_triangles, self.rng) for _ in range(n)]
+            return [
+                color_sampled_genome(cfg.n_triangles, self.rng, self.target, self.img_w, self.img_h)
+                if (cfg.init_method == "color_sample" or self.rng.random() < 0.5)
+                else random_genome(cfg.n_triangles, self.rng)
+                for _ in range(n)
+            ]
 
     def _boltzmann_temperature(self) -> float:
         """

@@ -111,6 +111,8 @@ def parse_args() -> Config:
     )
     p.add_argument("--mutation-rate", type=float, default=0.02, help="Per-gene mutation probability (default: 0.02)")
     p.add_argument("--mutation-sigma", type=float, default=0.05, help="Mutation noise std (default: 0.05)")
+    p.add_argument("--mutation-sigma-min", type=float, default=0.0,
+                   help="Minimum effective sigma for non_uniform mutation (default: 0.0 = disabled)")
     p.add_argument("--multigen-max", type=int, default=5, help="Max genes mutated per call for multigen (default: 5)")
     p.add_argument("--geometry-mutation-scale", type=float, default=1.0,
                    help="Sigma multiplier for triangle vertex genes (default: 1.0)")
@@ -130,6 +132,16 @@ def parse_args() -> Config:
         choices=["exclusive", "additive"],
         help="Survival strategy (default: exclusive)",
     )
+
+    # Diversity restart
+    p.add_argument("--diversity-restart", action="store_true",
+                   help="Inject random individuals when population diversity collapses (fitness std < threshold)")
+    p.add_argument("--diversity-threshold", type=float, default=2.0,
+                   help="Fitness std below this triggers a diversity injection (default: 2.0)")
+    p.add_argument("--diversity-fraction", type=float, default=0.3,
+                   help="Fraction of population replaced per injection (default: 0.3)")
+    p.add_argument("--diversity-cooldown", type=int, default=20,
+                   help="Min generations between injections (default: 20)")
 
     # Termination
     p.add_argument("--target-mse", type=float, default=None,
@@ -182,6 +194,7 @@ def parse_args() -> Config:
         mutation_method=a.mutation,
         mutation_rate=a.mutation_rate,
         mutation_sigma=a.mutation_sigma,
+        mutation_sigma_min=a.mutation_sigma_min,
         multigen_max_genes=a.multigen_max,
         geometry_mutation_scale=a.geometry_mutation_scale,
         color_mutation_scale=a.color_mutation_scale,
@@ -189,6 +202,10 @@ def parse_args() -> Config:
         layer_mutation_rate=a.layer_mutation_rate,
         layer_mutation_max_shift=a.layer_mutation_max_shift,
         survival_strategy=a.survival,
+        diversity_restart=a.diversity_restart,
+        diversity_restart_threshold=a.diversity_threshold,
+        diversity_restart_fraction=a.diversity_fraction,
+        diversity_restart_cooldown=a.diversity_cooldown,
         target_mse=a.target_mse,
         stop_on_stagnation=a.stop_stagnation,
         stagnation_gens=a.stagnation_gens,
@@ -254,11 +271,13 @@ def main() -> None:
     interrupted = False
     try:
         for gen in range(cfg.generations):
-            best_fit, mean_fit = ga.step()
+            best_fit, mean_fit, restarted = ga.step()
+            restart_tag = "  [diversity restart]" if restarted else ""
             print(
                 f"  Gen {gen+1:4d}/{cfg.generations}"
                 f"  best={best_fit:8.2f}"
-                f"  mean={mean_fit:8.2f}",
+                f"  mean={mean_fit:8.2f}"
+                f"{restart_tag}",
                 flush=True,
             )
 
@@ -308,6 +327,8 @@ def main() -> None:
             "selection_method": cfg.selection_method,
             "crossover_method": cfg.crossover_method,
             "mutation_method": cfg.mutation_method,
+            "mutation_sigma": cfg.mutation_sigma,
+            "mutation_sigma_min": cfg.mutation_sigma_min,
             "survival_strategy": cfg.survival_strategy,
             "best_mse": float(best_fitness),
             "runtime_seconds": runtime_seconds,

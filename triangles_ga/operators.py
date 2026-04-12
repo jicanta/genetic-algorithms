@@ -405,6 +405,7 @@ def mutate_non_uniform(
     rng: np.random.Generator,
     mutation_rate: float = 0.02,
     mutation_sigma: float = 0.10,
+    mutation_sigma_min: float = 0.0,
     generation: int = 0,
     max_generations: int = 500,
     geometry_sigma_scale: float = 1.0,
@@ -416,15 +417,18 @@ def mutate_non_uniform(
     """
     Non-uniform mutation: sigma decays with generation progress.
 
-    sigma_effective = mutation_sigma * (1 - generation/max_generations)^2
+    sigma_effective = max(
+        mutation_sigma_min,
+        mutation_sigma * (1 - generation/max_generations)^2,
+    )
 
     Early generations: large sigma → wide exploration.
-    Late generations:  small sigma → local refinement.
+    Late generations:  small sigma floor → local refinement without going inert.
 
     Mimics a simulated annealing schedule embedded in the mutation operator.
     """
     progress = generation / max(max_generations - 1, 1)
-    effective_sigma = mutation_sigma * (1.0 - progress) ** 2
+    effective_sigma = max(mutation_sigma_min, mutation_sigma * (1.0 - progress) ** 2)
 
     child = genome.copy()
     mask = rng.random(child.shape) < mutation_rate

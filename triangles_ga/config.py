@@ -122,7 +122,8 @@ class Config:
     workers: int = 1        # parallel processes for fitness eval; 1 = single-threaded (default), 0 = all CPU cores
     fitness_sample: float = 1.0  # fraction of pixels used for MSE (1.0 = all pixels)
     saliency_weight: float = 0.0 # extra weight for bright/saturated target pixels
-    renderer: str = "auto"  # rendering backend: auto | skia | pil
+    renderer: str = "auto"  # rendering backend: auto | skia | pil | numba
+    fast_fitness: bool = False  # use Numba JIT MSE (requires numba)
 
     # --- I/O ---
     save_every: int = 50

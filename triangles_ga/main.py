@@ -26,7 +26,7 @@ from triangles_ga.config import Config
 from triangles_ga.ga import TriangleGA
 from triangles_ga.io import save_result
 from triangles_ga.plots import export_history_csv, export_run_metadata, save_run_plots
-from triangles_ga.render import set_backend, set_shape, _HAVE_SKIA
+from triangles_ga.render import set_backend, set_shape, _HAVE_SKIA, _HAVE_NUMBA
 
 
 def load_target(image_path: str, img_size: Optional[int]) -> tuple[np.ndarray, int, int]:
@@ -150,10 +150,13 @@ def parse_args() -> Config:
     p.add_argument(
         "--renderer",
         default="auto",
-        choices=["auto", "skia", "pil"],
+        choices=["auto", "skia", "pil", "numba"],
         help="Rendering backend: 'skia' (fast, requires skia-python), 'pil' (pure Python), "
+             "'numba' (JIT compiled, requires numba), "
              "'auto' (skia if available, else pil). Default: auto",
     )
+    p.add_argument("--fast-fitness", action="store_true",
+                   help="Use Numba JIT-compiled MSE for fitness eval (requires numba)")
 
     # I/O
     p.add_argument("--save-every", type=int, default=50, help="Snapshot interval in gens (default: 50)")
@@ -201,6 +204,7 @@ def parse_args() -> Config:
         fitness_sample=a.fitness_sample,
         saliency_weight=a.saliency_weight,
         renderer=a.renderer,
+        fast_fitness=a.fast_fitness,
         no_plots=a.no_plots,
         graphs_only=a.graphs_only,
         seed=a.seed,
@@ -221,6 +225,8 @@ def main() -> None:
     else:
         active_renderer = cfg.renderer
         renderer_note = active_renderer
+    if cfg.fast_fitness:
+        renderer_note += " + fast-fitness (numba MSE)"
     print(f"Renderer: {renderer_note}")
 
     print(f"Loading target: {cfg.image_path}")

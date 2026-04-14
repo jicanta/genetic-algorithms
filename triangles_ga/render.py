@@ -21,6 +21,12 @@ try:
 except ImportError:
     _HAVE_SKIA = False
 
+try:
+    from .render_numba import render_genome_numba as _render_numba
+    _HAVE_NUMBA = True
+except (ImportError, ModuleNotFoundError):
+    _HAVE_NUMBA = False
+
 # Module-level backend selection.  Set via set_backend() before rendering.
 # Options: "auto" | "skia" | "pil"
 _BACKEND: str = "auto"
@@ -39,12 +45,17 @@ def set_backend(backend: str) -> None:
         RuntimeError: when "skia" is requested but the skia package is not installed.
     """
     global _BACKEND
-    if backend not in ("auto", "skia", "pil"):
-        raise ValueError(f"Unknown renderer {backend!r}. Choose: auto | skia | pil")
+    if backend not in ("auto", "skia", "pil", "numba"):
+        raise ValueError(f"Unknown renderer {backend!r}. Choose: auto | skia | pil | numba")
     if backend == "skia" and not _HAVE_SKIA:
         raise RuntimeError(
             "Renderer 'skia' requested but the skia-python package is not installed. "
             "Install it with:  pip install skia-python"
+        )
+    if backend == "numba" and not _HAVE_NUMBA:
+        raise RuntimeError(
+            "Renderer 'numba' requested but the numba package is not installed. "
+            "Install it with:  pip install numba"
         )
     _BACKEND = backend
 
@@ -212,6 +223,10 @@ def render_genome(genome: np.ndarray, img_w: int, img_h: int) -> np.ndarray:
     Returns:
         float32 array of shape (img_h, img_w, 3), values in [0, 255].
     """
+    if _BACKEND == "numba":
+        # Numba rasterizer — triangles only (ovals fall through to Skia/PIL)
+        if _SHAPE == "triangle":
+            return _render_numba(genome, img_w, img_h)
     use_skia = _BACKEND == "skia" or (_BACKEND == "auto" and _HAVE_SKIA)
     if _SHAPE == "oval":
         if use_skia:

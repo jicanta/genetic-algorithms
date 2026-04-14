@@ -24,6 +24,11 @@ _W_img_w:  int = 0
 _W_img_h:  int = 0
 _W_sample_mask: Optional[np.ndarray] = None  # flat boolean mask for pixel subsampling
 _W_pixel_weights: Optional[np.ndarray] = None
+_W_fast_fitness: bool = False
+
+# Conditional import — only loaded when fast_fitness is enabled
+_mse_numba = None
+_mse_numba_masked = None
 
 
 def _worker_init(target: np.ndarray, img_w: int, img_h: int,
@@ -31,8 +36,10 @@ def _worker_init(target: np.ndarray, img_w: int, img_h: int,
                  pixel_weights: Optional[np.ndarray] = None,
                  renderer: str = "auto",
                  shape: str = "triangle",
-                 ignore_sigint: bool = False) -> None:
+                 ignore_sigint: bool = False,
+                 fast_fitness: bool = False) -> None:
     global _W_target, _W_img_w, _W_img_h, _W_sample_mask, _W_pixel_weights
+    global _W_fast_fitness, _mse_numba, _mse_numba_masked
     if ignore_sigint:
         import signal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -41,6 +48,11 @@ def _worker_init(target: np.ndarray, img_w: int, img_h: int,
     _W_img_h  = img_h
     _W_sample_mask = sample_mask
     _W_pixel_weights = pixel_weights
+    _W_fast_fitness = fast_fitness
+    if fast_fitness:
+        from .fitness_numba import mse_numba, mse_numba_masked
+        _mse_numba = mse_numba
+        _mse_numba_masked = mse_numba_masked
     from .render import set_backend, set_shape
     set_backend(renderer)
     set_shape(shape)
@@ -50,6 +62,16 @@ def _eval_genome(genome: np.ndarray) -> float:
     """Evaluate a genome using worker-local target (no per-call pickling)."""
     from .render import render_genome
     rendered = render_genome(genome, _W_img_w, _W_img_h)
+
+    # Fast path: Numba JIT MSE (zero intermediate allocations)
+    if _W_fast_fitness and _mse_numba is not None:
+        if _W_sample_mask is not None:
+            return float(_mse_numba_masked(
+                rendered.reshape(-1, 3), _W_target.reshape(-1, 3), _W_sample_mask
+            ))
+        return float(_mse_numba(rendered, _W_target))
+
+    # Default path: NumPy MSE
     if _W_sample_mask is not None:
         diff = rendered.reshape(-1, 3)[_W_sample_mask] - _W_target.reshape(-1, 3)[_W_sample_mask]
         if _W_pixel_weights is not None:
@@ -156,9 +178,9 @@ class TriangleGA:
         if config.survival_strategy not in ("exclusive", "additive"):
             raise ValueError(f"Unknown survival strategy: {config.survival_strategy!r}. "
                              f"Choose from: exclusive | additive")
-        if config.renderer not in ("auto", "skia", "pil"):
+        if config.renderer not in ("auto", "skia", "pil", "numba"):
             raise ValueError(f"Unknown renderer: {config.renderer!r}. "
-                             f"Choose from: auto | skia | pil")
+                             f"Choose from: auto | skia | pil | numba")
 
         self._genes_per_shape: int = genes_per_shape(config.shape)
 
@@ -181,7 +203,8 @@ class TriangleGA:
         self._pixel_weights = _build_saliency_weights(target, config.saliency_weight)
 
         # Set worker globals for the main-process (single-worker) path.
-        _worker_init(target, img_w, img_h, sample_mask, self._pixel_weights, config.renderer, config.shape)
+        _worker_init(target, img_w, img_h, sample_mask, self._pixel_weights,
+                     config.renderer, config.shape, False, config.fast_fitness)
 
         # Persistent process pool — created once, reused every generation.
         if self._workers > 1:
@@ -200,6 +223,7 @@ class TriangleGA:
                         config.renderer,
                         config.shape,
                         True,
+                        config.fast_fitness,
                     ),
                 )
             else:
@@ -217,6 +241,7 @@ class TriangleGA:
                         config.renderer,
                         config.shape,
                         True,
+                        config.fast_fitness,
                     ),
                 )
         else:

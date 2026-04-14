@@ -53,23 +53,31 @@ class ASCIIArtGA:
 
     def initialize(self):
         """
-        Seed the population with a mix of warm-start and random individuals.
+        Seed the population.
 
-        Half the population starts from a greedy brightness-mapped genome with
-        increasing amounts of noise — giving the GA a head start while keeping
-        diversity. The other half is fully random for broader exploration.
+        'greedy' (default): half the population starts from a greedy
+        brightness-mapped genome with increasing noise; the other half is
+        random. Gives the GA a head start but can trap it in a local optimum.
+
+        'random': all individuals are uniformly random. Starts with a higher
+        MSE but gives the GA more room to improve over generations.
         """
         cfg = self.config
-        n_greedy = cfg.population // 2
-        base = greedy_genome(
-            self.target, self.rows, self.cols, self.cell_h, self.cell_w, self.darkness
-        )
         pop: list[np.ndarray] = []
-        for i in range(n_greedy):
-            noise = 0.05 + 0.45 * (i / max(n_greedy - 1, 1))
-            pop.append(mutate(base, noise, self.n_chars, self.darkness, self.rng))
-        for _ in range(cfg.population - n_greedy):
-            pop.append(self.rng.integers(0, self.n_chars, size=(self.rows, self.cols)))
+
+        if cfg.init_method == "greedy":
+            n_greedy = cfg.population // 2
+            base = greedy_genome(
+                self.target, self.rows, self.cols, self.cell_h, self.cell_w, self.darkness
+            )
+            for i in range(n_greedy):
+                noise = 0.05 + 0.45 * (i / max(n_greedy - 1, 1))
+                pop.append(mutate(base, noise, self.n_chars, self.darkness, self.rng))
+            for _ in range(cfg.population - n_greedy):
+                pop.append(self.rng.integers(0, self.n_chars, size=(self.rows, self.cols)))
+        else:  # random
+            for _ in range(cfg.population):
+                pop.append(self.rng.integers(0, self.n_chars, size=(self.rows, self.cols)))
 
         self.population = pop
         self.fitnesses = np.array([self._eval(ind) for ind in pop])

@@ -18,6 +18,7 @@ class Config:
     tournament_k: int = 5
     charset: str = "@%#*+=-:. "
     char_aspect: Optional[float] = None  # None = auto from font metrics
+    init_method: str = "greedy"  # "greedy" | "random"
     gif: bool = False
     seed: int = 42
 
@@ -46,6 +47,8 @@ class Config:
             raise ValueError(f"cols must be >= 1, got {self.cols}")
         if not self.charset:
             raise ValueError("charset must contain at least one character")
+        if self.init_method not in ("greedy", "random"):
+            raise ValueError(f"init_method must be 'greedy' or 'random', got {self.init_method!r}")
         if self.stagnation_gens < 1:
             raise ValueError(f"stagnation_gens must be >= 1, got {self.stagnation_gens}")
         if self.convergence_threshold <= 0.0:

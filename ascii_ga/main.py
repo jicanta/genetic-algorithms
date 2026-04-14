@@ -53,6 +53,8 @@ def parse_args() -> Config:
     p.add_argument("--crossover-prob", type=float, default=0.8,         help="Crossover probability (default: 0.8)")
     p.add_argument("--charset",        default="@%#*+=-:. ",            help="Character set, dark→light")
     p.add_argument("--char-aspect",    type=float, default=None,        help="cell_w/cell_h override (default: auto)")
+    p.add_argument("--init",           default="greedy", choices=["greedy", "random"],
+                                                                        help="Initialization: 'greedy' warm-start or 'random' (default: greedy)")
     p.add_argument("--gif",            action="store_true",             help="Save evolution.gif (needs imageio)")
     p.add_argument("--seed",           type=int,   default=42)
 
@@ -79,6 +81,7 @@ def parse_args() -> Config:
         tournament_k=a.tournament_k,
         charset=a.charset,
         char_aspect=a.char_aspect,
+        init_method=a.init,
         gif=a.gif,
         seed=a.seed,
         stop_on_stagnation=a.stop_stagnation,
